@@ -1,8 +1,25 @@
 use std::net::SocketAddr;
 
-use axum::{Router, response::IntoResponse, routing::get};
+use argon2_async::{hash, Config};
+use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use dotenv::dotenv;
+use std::env;
+use nanoid::nanoid;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref PASSWORD_HASHING_SECRET: String = env::var("PASSWORD_HASHING_SECRET").unwrap();
+}
+
+async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
+    let hash = hash(password.as_bytes()).await.unwrap();
+    hash
+}
+
+async fn nanoid() -> impl IntoResponse {
+    nanoid!()
+}
 
 async fn root() -> impl IntoResponse {
     "Hello, World!"
@@ -19,8 +36,20 @@ async fn main() {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+    
+    let argon2_config = Config{
+        iterations: 6,
+        parallelism: 6,
+        secret_key: Some(PASSWORD_HASHING_SECRET.as_bytes()),
+        ..Default::default()
+    };
 
-    let app = Router::new().route("/", get(root));
+    argon2_async::set_config(argon2_config).await;
+
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/nanoid", get(nanoid))
+        .route("/argon2/{password}", get(argon2));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {addr}");
