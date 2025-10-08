@@ -38,8 +38,8 @@ async fn main() {
         .init();
     
     let argon2_config = Config{
-        iterations: 6,
-        parallelism: 6,
+        iterations: 4,
+        parallelism: 4,
         secret_key: Some(PASSWORD_HASHING_SECRET.as_bytes()),
         ..Default::default()
     };
