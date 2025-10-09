@@ -8,7 +8,7 @@ use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod argonhasher;
-use argonhasher::{hash, Config};
+use argonhasher::{Config, hash};
 
 lazy_static! {
     static ref PASSWORD_HASHING_SECRET: String = env::var("PASSWORD_HASHING_SECRET").unwrap();

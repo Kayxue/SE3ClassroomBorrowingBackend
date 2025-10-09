@@ -1,8 +1,9 @@
 use argon2::{
-    password_hash::{self, rand_core::OsRng, SaltString}, Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version
+    Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
+    password_hash::{self, SaltString, rand_core::OsRng},
 };
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::task;
 
 static GLOBAL_ARGON2: OnceLock<Arc<Argon2<'static>>> = OnceLock::new();
@@ -16,7 +17,7 @@ pub struct Config {
 
 pub fn set_config(config: Config) {
     let secret_bytes: &'static [u8] = Box::leak(config.secret_key.into_boxed_slice());
-    
+
     let argon2 = Argon2::new_with_secret(
         secret_bytes,
         Algorithm::Argon2id,
@@ -39,7 +40,7 @@ pub async fn hash(password: impl AsRef<[u8]>) -> Result<String, password_hash::E
         .get()
         .expect("Argon2 instance not initialized. Call set_config first.")
         .clone();
-    
+
     let password = password.as_ref().to_owned();
 
     let res = task::spawn_blocking(move || {
@@ -52,7 +53,10 @@ pub async fn hash(password: impl AsRef<[u8]>) -> Result<String, password_hash::E
     res.await.unwrap()
 }
 
-pub async fn verify(password: impl AsRef<[u8]>, hash: impl AsRef<str>) -> Result<bool, password_hash::Error> {
+pub async fn verify(
+    password: impl AsRef<[u8]>,
+    hash: impl AsRef<str>,
+) -> Result<bool, password_hash::Error> {
     let argon2 = GLOBAL_ARGON2
         .get()
         .expect("Argon2 instance not initialized. Call set_config first.")
