@@ -1,12 +1,14 @@
 use std::net::SocketAddr;
 
-use argon2_async::{Config, hash};
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use dotenv::dotenv;
 use lazy_static::lazy_static;
 use nanoid::nanoid;
 use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+mod argonhasher;
+use argonhasher::{hash, Config};
 
 lazy_static! {
     static ref PASSWORD_HASHING_SECRET: String = env::var("PASSWORD_HASHING_SECRET").unwrap();
@@ -40,11 +42,11 @@ async fn main() {
     let argon2_config = Config {
         iterations: 4,
         parallelism: 4,
-        secret_key: Some(PASSWORD_HASHING_SECRET.as_bytes()),
-        ..Default::default()
+        memory_cost: 512,
+        secret_key: PASSWORD_HASHING_SECRET.as_bytes().to_vec(),
     };
 
-    argon2_async::set_config(argon2_config).await;
+    argonhasher::set_config(argon2_config);
 
     let app = Router::new()
         .route("/", get(root))
