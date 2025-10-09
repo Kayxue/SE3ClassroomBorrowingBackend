@@ -14,3 +14,6 @@ tower = "0.5.2"
 tracing = "0.1.41"
 tracing-subscriber = {version = "0.3.20",features = ["env-filter"]}
 sea-orm = { version = "2.0.0-rc", features = [ "sqlx-postgres", "runtime-tokio-native-tls", "macros" ] }
+tower-sessions = "0.14.0"
+axum-login = "0.18.0"
+tower-sessions-redis-store = "0.16.0"
