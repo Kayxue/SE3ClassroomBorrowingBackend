@@ -12,7 +12,6 @@ dependencies = [
  "dotenv",
  "lazy_static",
  "nanoid",
- "once_cell",
  "sea-orm",
  "tokio",
  "tower",

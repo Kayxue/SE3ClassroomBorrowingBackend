@@ -1,11 +1,11 @@
 use argon2::{
     password_hash::{self, rand_core::OsRng, SaltString}, Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version
 };
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use std::sync::Arc;
 use tokio::task;
 
-static GLOBAL_ARGON2: OnceCell<Arc<Argon2<'static>>> = OnceCell::new();
+static GLOBAL_ARGON2: OnceLock<Arc<Argon2<'static>>> = OnceLock::new();
 
 pub struct Config {
     pub secret_key: Vec<u8>,
