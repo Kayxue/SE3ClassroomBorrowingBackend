@@ -9,7 +9,7 @@ dependencies = [
  "argon2",
  "axum",
  "axum-login",
- "dotenv",
+ "load-dotenv",
  "nanoid",
  "sea-orm",
  "serde",
@@ -1325,6 +1325,15 @@ name = "litemap"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
+
+[[package]]
+name = "load-dotenv"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71abcf6d8da2a6c163554a61cdbca2438bbe9e687a9c5ebeee12e9af42864b54"
+dependencies = [
+ "dotenv",
+]
 
 [[package]]
 name = "lock_api"

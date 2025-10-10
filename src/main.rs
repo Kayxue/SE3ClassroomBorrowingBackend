@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
-use dotenv::dotenv;
+use load_dotenv::try_load_dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
@@ -16,6 +16,8 @@ mod argonhasher;
 use argonhasher::hash;
 
 mod loginsystem;
+
+try_load_dotenv!();
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
@@ -37,8 +39,6 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
-
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -47,13 +47,13 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let password_hashing_secret: String = env::var("PASSWORD_HASHING_SECRET").unwrap();
+    let password_hashing_secret = env!("PASSWORD_HASHING_SECRET");
 
     let argon2_config = argonhasher::Config {
         iterations: 4,
         parallelism: 4,
         memory_cost: 512,
-        secret_key: password_hashing_secret.as_bytes().to_vec(),
+        secret_key: password_hashing_secret,
     };
 
     argonhasher::set_config(argon2_config);

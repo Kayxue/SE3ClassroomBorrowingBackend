@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 axum = "0.8.6"
-dotenv = "0.15.0"
 nanoid = "0.4.0"
 tokio = { version = "1.47.1", features = ["full"] }
 tower = "0.5.2"
@@ -21,3 +20,4 @@ axum-login = "0.18.0"
 tower-sessions-redis-store = "0.16.0"
 argon2 = {version = "0.5.3",features = ["password-hash"]}
 serde = "1.0.228"
+load-dotenv = "0.1.2"
