@@ -5,10 +5,15 @@ use dotenv::dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
+use tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration};
+use tower_sessions_redis_store::{
+    RedisStore,
+    fred::prelude::{ClientLike, Config, Pool},
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod argonhasher;
-use argonhasher::{Config, hash};
+use argonhasher::hash;
 
 mod loginsystem;
 
@@ -26,8 +31,8 @@ async fn root() -> impl IntoResponse {
 }
 
 #[derive(Clone)]
-struct AppState{
-    db: DatabaseConnection
+struct AppState {
+    db: DatabaseConnection,
 }
 
 #[tokio::main]
@@ -44,7 +49,7 @@ async fn main() {
 
     let password_hashing_secret: String = env::var("PASSWORD_HASHING_SECRET").unwrap();
 
-    let argon2_config = Config {
+    let argon2_config = argonhasher::Config {
         iterations: 4,
         parallelism: 4,
         memory_cost: 512,
@@ -52,6 +57,14 @@ async fn main() {
     };
 
     argonhasher::set_config(argon2_config);
+
+    // let pool = Pool::new(Config::default(), None, None, None, 6).unwrap();
+    // let _ = pool.connect();
+    // pool.wait_for_connect().await.unwrap();
+    // let session_store = RedisStore::new(pool);
+    // let session_layer = SessionManagerLayer::new(session_store)
+    //     .with_secure(false)
+    //     .with_expiry(Expiry::OnInactivity(Duration::days(1)));
 
     // let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     // let db = Database::connect(&database_url).await.unwrap();
@@ -61,7 +74,7 @@ async fn main() {
         .route("/", get(root))
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2));
-        // .with_state(_app_state);
+    // .with_state(_app_state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {addr}");
