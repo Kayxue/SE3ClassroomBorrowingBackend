@@ -1,6 +1,8 @@
 use sea_orm::DatabaseConnection;
 use serde::Deserialize;
 
+pub type AuthSession = axum_login::AuthSession<Backend>;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Credentials {
     pub email: String,
