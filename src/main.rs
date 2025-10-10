@@ -3,11 +3,14 @@ use std::net::SocketAddr;
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use dotenv::dotenv;
 use nanoid::nanoid;
+use sea_orm::DatabaseConnection;
 use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod argonhasher;
 use argonhasher::{Config, hash};
+
+mod loginsystem;
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
@@ -20,6 +23,10 @@ async fn nanoid() -> impl IntoResponse {
 
 async fn root() -> impl IntoResponse {
     "Hello, World!"
+}
+
+struct AppState{
+    db: DatabaseConnection
 }
 
 #[tokio::main]

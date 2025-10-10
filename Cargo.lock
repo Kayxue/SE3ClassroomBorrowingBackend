@@ -12,6 +12,7 @@ dependencies = [
  "dotenv",
  "nanoid",
  "sea-orm",
+ "serde",
  "tokio",
  "tower",
  "tower-sessions",
