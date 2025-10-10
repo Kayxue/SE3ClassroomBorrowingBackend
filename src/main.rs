@@ -1,9 +1,9 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use dotenv::dotenv;
 use nanoid::nanoid;
-use sea_orm::DatabaseConnection;
+use sea_orm::{Database, DatabaseConnection};
 use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -27,7 +27,7 @@ async fn root() -> impl IntoResponse {
 
 #[derive(Clone)]
 struct AppState{
-    db: Arc<DatabaseConnection>
+    db: DatabaseConnection
 }
 
 #[tokio::main]
@@ -54,8 +54,8 @@ async fn main() {
     argonhasher::set_config(argon2_config);
 
     // let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    // let db = Arc::new(sea_orm::Database::connect(&database_url).await.unwrap());
-    // let _app_state = AppState { db };
+    // let db = Database::connect(&database_url).await.unwrap();
+    // let _app_state = AppState { db: db };
 
     let app = Router::new()
         .route("/", get(root))
