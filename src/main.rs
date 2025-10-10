@@ -15,7 +15,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod argonhasher;
 use argonhasher::hash;
 
+use crate::routes::user::user_router;
+
 mod loginsystem;
+mod routes;
 
 try_load_dotenv!();
 
@@ -73,7 +76,8 @@ async fn main() {
     let app = Router::new()
         .route("/", get(root))
         .route("/nanoid", get(nanoid))
-        .route("/argon2/{password}", get(argon2));
+        .route("/argon2/{password}", get(argon2))
+        .nest("/user", user_router());
     // .with_state(_app_state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
