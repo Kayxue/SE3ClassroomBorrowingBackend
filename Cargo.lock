@@ -10,7 +10,6 @@ dependencies = [
  "axum",
  "axum-login",
  "dotenv",
- "lazy_static",
  "nanoid",
  "sea-orm",
  "tokio",

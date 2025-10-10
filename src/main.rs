@@ -2,17 +2,12 @@ use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use dotenv::dotenv;
-use lazy_static::lazy_static;
 use nanoid::nanoid;
 use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod argonhasher;
 use argonhasher::{Config, hash};
-
-lazy_static! {
-    static ref PASSWORD_HASHING_SECRET: String = env::var("PASSWORD_HASHING_SECRET").unwrap();
-}
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
@@ -39,11 +34,13 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let password_hashing_secret: String = env::var("PASSWORD_HASHING_SECRET").unwrap();
+
     let argon2_config = Config {
         iterations: 4,
         parallelism: 4,
         memory_cost: 512,
-        secret_key: PASSWORD_HASHING_SECRET.as_bytes().to_vec(),
+        secret_key: password_hashing_secret.as_bytes().to_vec(),
     };
 
     argonhasher::set_config(argon2_config);
