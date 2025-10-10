@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use dotenv::dotenv;
@@ -25,8 +25,9 @@ async fn root() -> impl IntoResponse {
     "Hello, World!"
 }
 
+#[derive(Clone)]
 struct AppState{
-    db: DatabaseConnection
+    db: Arc<DatabaseConnection>
 }
 
 #[tokio::main]
@@ -52,10 +53,15 @@ async fn main() {
 
     argonhasher::set_config(argon2_config);
 
+    // let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    // let db = Arc::new(sea_orm::Database::connect(&database_url).await.unwrap());
+    // let _app_state = AppState { db };
+
     let app = Router::new()
         .route("/", get(root))
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2));
+        // .with_state(_app_state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {addr}");
