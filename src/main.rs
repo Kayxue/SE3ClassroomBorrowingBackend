@@ -8,7 +8,7 @@ use std::env;
 use tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration};
 use tower_sessions_redis_store::{
     RedisStore,
-    fred::prelude::{ClientLike, Config, Pool},
+    fred::prelude::{ClientLike, Config, Pool, Server, ServerConfig},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -62,13 +62,22 @@ async fn main() {
 
     argonhasher::set_config(argon2_config);
 
-    // let pool = Pool::new(Config::default(), None, None, None, 6).unwrap();
-    // let _ = pool.connect();
-    // pool.wait_for_connect().await.unwrap();
-    // let session_store = RedisStore::new(pool);
-    // let session_layer = SessionManagerLayer::new(session_store)
-    //     .with_secure(false)
-    //     .with_expiry(Expiry::OnInactivity(Duration::days(1)));
+    let redis_pool_config = Config {
+        server: ServerConfig::Centralized {
+            server: Server {
+                host: "".into(),
+                port: 3003,
+            },
+        },
+        ..Default::default()
+    };
+    let pool = Pool::new(redis_pool_config, None, None, None, 6).unwrap();
+    let _ = pool.connect();
+    pool.wait_for_connect().await.unwrap();
+    let session_store = RedisStore::new(pool);
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false)
+        .with_expiry(Expiry::OnInactivity(Duration::days(1)));
 
     // let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     // let db = Database::connect(&database_url).await.unwrap();
