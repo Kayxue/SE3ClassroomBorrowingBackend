@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
+use axum_login::AuthManagerLayerBuilder;
 use dotenv::dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
@@ -15,10 +16,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod argonhasher;
 use argonhasher::hash;
 
-use crate::routes::user::user_router;
-
+mod entities;
 mod loginsystem;
 mod routes;
+
+use routes::user::user_router;
+
+use loginsystem::AuthBackend;
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
@@ -85,16 +89,21 @@ async fn main() {
         .with_secure(false)
         .with_expiry(Expiry::OnInactivity(Duration::days(1)));
 
-    // let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    // let db = Database::connect(&database_url).await.unwrap();
-    // let _app_state = AppState { db: db };
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db = Database::connect(&database_url).await.unwrap();
+
+    let auth_backend = AuthBackend::new(db.clone());
+    let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
+
+    let app_state = AppState { db: db };
 
     let app = Router::new()
         .route("/", get(root))
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2))
-        .nest("/user", user_router());
-    // .with_state(_app_state);
+        .nest("/user", user_router())
+        .with_state(app_state)
+        .layer(auth_layer);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {addr}");
