@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
+use dotenv::dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
@@ -39,6 +40,8 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()

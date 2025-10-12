@@ -11,9 +11,6 @@ WORKDIR /
 COPY --from=build /src/target/release/SE3ClassroomBorrowingBackend ./serve
 COPY --from=build /etc/ssl/certs /etc/ssl/certs
 
-ARG PASSWORD_HASHING_SECRET
-ENV PASSWORD_HASHING_SECRET=${PASSWORD_HASHING_SECRET}
-
 EXPOSE 3000
 
 ENTRYPOINT ["./serve"]
