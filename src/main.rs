@@ -14,14 +14,12 @@ use tower_sessions_redis_store::{
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod argonhasher;
-use argonhasher::hash;
-
 mod entities;
 mod loginsystem;
 mod routes;
 
+use argonhasher::hash;
 use routes::user::user_router;
-
 use loginsystem::AuthBackend;
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
