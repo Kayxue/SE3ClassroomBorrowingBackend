@@ -65,8 +65,14 @@ async fn main() {
     let redis_pool_config = Config {
         server: ServerConfig::Centralized {
             server: Server {
-                host: "".into(),
-                port: 3003,
+                host: env::var("REDIS_IP")
+                    .unwrap_or_else(|_| "localhost".into())
+                    .parse()
+                    .unwrap(),
+                port: env::var("REDIS_PORT")
+                    .unwrap_or_else(|_| "6379".into())
+                    .parse()
+                    .unwrap(),
             },
         },
         ..Default::default()
