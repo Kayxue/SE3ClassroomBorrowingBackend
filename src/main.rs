@@ -1,7 +1,6 @@
 use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
-use load_dotenv::try_load_dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
@@ -19,8 +18,6 @@ use crate::routes::user::user_router;
 
 mod loginsystem;
 mod routes;
-
-try_load_dotenv!();
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
@@ -50,13 +47,14 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let password_hashing_secret = env!("PASSWORD_HASHING_SECRET");
+    let password_hashing_secret =
+        env::var("PASSWORD_HASHING_SECRET").expect("PASSWORD_HASHING_SECRET must be set");
 
     let argon2_config = argonhasher::Config {
         iterations: 4,
         parallelism: 4,
         memory_cost: 512,
-        secret_key: password_hashing_secret,
+        secret_key: password_hashing_secret.into_bytes(),
     };
 
     argonhasher::set_config(argon2_config);

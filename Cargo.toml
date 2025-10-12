@@ -20,4 +20,4 @@ axum-login = "0.18.0"
 tower-sessions-redis-store = "0.16.0"
 argon2 = {version = "0.5.3",features = ["password-hash"]}
 serde = "1.0.228"
-load-dotenv = "0.1.2"
+dotenv = "0.15.0"

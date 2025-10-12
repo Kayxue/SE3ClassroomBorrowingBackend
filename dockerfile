@@ -1,7 +1,5 @@
 ARG BUILDPLATFORM
 FROM --platform=$BUILDPLATFORM rust:alpine AS build
-ARG PASSWORD_HASHING_SECRET
-ENV PASSWORD_HASHING_SECRET=${PASSWORD_HASHING_SECRET}
 WORKDIR /src
 COPY . .
 
@@ -12,6 +10,9 @@ FROM scratch
 WORKDIR /
 COPY --from=build /src/target/release/SE3ClassroomBorrowingBackend ./serve
 COPY --from=build /etc/ssl/certs /etc/ssl/certs
+
+ARG PASSWORD_HASHING_SECRET
+ENV PASSWORD_HASHING_SECRET=${PASSWORD_HASHING_SECRET}
 
 EXPOSE 3000
 
