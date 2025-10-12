@@ -5,7 +5,10 @@ use axum::{
     routing::{get, post},
 };
 
-use crate::{loginsystem::{AuthSession, Credentials}, AppState};
+use crate::{
+    AppState,
+    loginsystem::{AuthSession, Credentials},
+};
 
 async fn login(mut auth_session: AuthSession, Json(body): Json<Credentials>) -> impl IntoResponse {
     let user = match auth_session.authenticate(body).await {

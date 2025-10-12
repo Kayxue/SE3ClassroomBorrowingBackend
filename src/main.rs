@@ -19,8 +19,8 @@ mod loginsystem;
 mod routes;
 
 use argonhasher::hash;
-use routes::user::user_router;
 use loginsystem::AuthBackend;
+use routes::user::user_router;
 
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();

@@ -52,23 +52,15 @@ impl AuthnBackend for AuthBackend {
             .await?;
 
         if let Some(ref user) = user {
-            if verify(password.as_bytes(), &user.password)
-                .await
-                .is_ok()
-            {
+            if verify(password.as_bytes(), &user.password).await.is_ok() {
                 return Ok(Some(user.clone()));
             }
         }
         Ok(None)
     }
 
-    async fn get_user(
-        &self,
-        user_id: &UserId<Self>,
-    ) -> Result<Option<Self::User>, Self::Error> {
-        let user = User::find_by_id(user_id.to_owned())
-            .one(&self.db)
-            .await?;
+    async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
+        let user = User::find_by_id(user_id.to_owned()).one(&self.db).await?;
         Ok(user)
     }
 }
