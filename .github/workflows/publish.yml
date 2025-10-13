@@ -63,8 +63,6 @@ jobs:
           tags: ${{ env.REGISTRY_IMAGE }}
           provenance: false
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          build-args: |
-            PASSWORD_HASHING_SECRET=${{ secrets.PASSWORD_HASHING_SECRET }}
 
       - name: Export digest
         run: |
