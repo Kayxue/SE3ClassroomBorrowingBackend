@@ -11,3 +11,13 @@ pub enum Role {
     #[sea_orm(string_value = "user")]
     User,
 }
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "status")]
+pub enum Status {
+    #[sea_orm(string_value = "available")]
+    Available,
+    #[sea_orm(string_value = "occupied")]
+    Occupied,
+    #[sea_orm(string_value = "maintenance")]
+    Maintenance,
+}

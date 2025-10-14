@@ -22,6 +22,8 @@ use argonhasher::hash;
 use loginsystem::AuthBackend;
 use routes::user::user_router;
 
+use crate::routes::classroom::classroom_router;
+
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
     hash
@@ -100,6 +102,7 @@ async fn main() {
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2))
         .nest("/user", user_router())
+        .nest("/classroom", classroom_router())
         .with_state(app_state)
         .layer(auth_layer);
 
