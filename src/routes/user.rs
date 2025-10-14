@@ -85,7 +85,6 @@ async fn profile(session: AuthSession) -> impl IntoResponse {
 }
 
 pub fn user_router() -> Router<AppState> {
-    //TODO: Add suitable middleware for authentication
     Router::new()
         .route("/login", post(login))
         .route("/logout", get(logout))
