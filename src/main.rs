@@ -106,19 +106,7 @@ async fn main() {
 
     let app_state = AppState { db: db };
 
-    let cors_layer = CorsLayer::new()
-        .allow_methods([
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::DELETE,
-            Method::OPTIONS,
-        ])
-        .allow_origin(
-            ["http://localhost:5173", "http://SE3Frontend:80"].map(|s| s.parse().unwrap()),
-        )
-        .allow_credentials(true)
-        .allow_headers([header::CONTENT_TYPE]);
+    let cors_layer = CorsLayer::very_permissive();
 
     let app = Router::new()
         .route("/", get(root))
