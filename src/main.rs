@@ -96,7 +96,7 @@ async fn main() {
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
         .with_expiry(Expiry::OnInactivity(Duration::days(1)))
-        .with_same_site(SameSite::None);
+        .with_same_site(SameSite::Lax);
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(&database_url).await.unwrap();
@@ -106,8 +106,6 @@ async fn main() {
 
     let app_state = AppState { db: db };
 
-    let cors_layer = CorsLayer::very_permissive();
-
     let app = Router::new()
         .route("/", get(root))
         .route("/nanoid", get(nanoid))
@@ -115,7 +113,7 @@ async fn main() {
         .nest("/user", user_router())
         .nest("/classroom", classroom_router())
         .with_state(app_state)
-        .layer(ServiceBuilder::new().layer(cors_layer).layer(auth_layer));
+        .layer(ServiceBuilder::new().layer(auth_layer));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {addr}");
