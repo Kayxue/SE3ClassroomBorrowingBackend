@@ -1,6 +1,12 @@
 use std::net::SocketAddr;
 
-use axum::{Router, extract::Path, http::Method, response::IntoResponse, routing::get};
+use axum::{
+    Router,
+    extract::Path,
+    http::{Method, header},
+    response::IntoResponse,
+    routing::get,
+};
 use axum_login::AuthManagerLayerBuilder;
 use dotenv::dotenv;
 use nanoid::nanoid;
@@ -110,7 +116,8 @@ async fn main() {
         .allow_origin(
             ["http://localhost:5173", "http://SE3Frontend:80"].map(|s| s.parse().unwrap()),
         )
-        .allow_credentials(true);
+        .allow_credentials(true)
+        .allow_headers([header::CONTENT_TYPE]);
 
     let app = Router::new()
         .route("/", get(root))
