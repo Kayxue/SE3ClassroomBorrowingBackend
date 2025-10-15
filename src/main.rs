@@ -6,6 +6,8 @@ use dotenv::dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
+use tower::ServiceBuilder;
+use tower_http::cors::{Any, CorsLayer};
 use tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration};
 use tower_sessions_redis_store::{
     RedisStore,
@@ -97,6 +99,11 @@ async fn main() {
 
     let app_state = AppState { db: db };
 
+    let cors_layer = CorsLayer::new()
+        .allow_methods(Any)
+        .allow_origin(Any)
+        .allow_credentials(true);
+
     let app = Router::new()
         .route("/", get(root))
         .route("/nanoid", get(nanoid))
@@ -104,7 +111,7 @@ async fn main() {
         .nest("/user", user_router())
         .nest("/classroom", classroom_router())
         .with_state(app_state)
-        .layer(auth_layer);
+        .layer(ServiceBuilder::new().layer(cors_layer).layer(auth_layer));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {addr}");
