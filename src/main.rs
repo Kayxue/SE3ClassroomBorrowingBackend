@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 use axum::{
     Router,
     extract::Path,
-    http::{Method, header},
     response::IntoResponse,
     routing::get,
 };
@@ -13,7 +12,6 @@ use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
 use tower::ServiceBuilder;
-use tower_http::cors::{Any, CorsLayer};
 use tower_sessions::{cookie::{time::Duration, SameSite}, Expiry, SessionManagerLayer};
 use tower_sessions_redis_store::{
     RedisStore,
