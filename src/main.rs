@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use axum::{extract::Path, http::Method, response::IntoResponse, routing::get, Router};
+use axum::{Router, extract::Path, http::Method, response::IntoResponse, routing::get};
 use axum_login::AuthManagerLayerBuilder;
 use dotenv::dotenv;
 use nanoid::nanoid;
@@ -100,8 +100,16 @@ async fn main() {
     let app_state = AppState { db: db };
 
     let cors_layer = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
-        .allow_origin(Any)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_origin(
+            ["http://100.100.52.40:5173", "http://SE3Frontend:5173"].map(|s| s.parse().unwrap()),
+        )
         .allow_credentials(true);
 
     let app = Router::new()
