@@ -96,7 +96,7 @@ async fn main() {
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
         .with_expiry(Expiry::OnInactivity(Duration::days(1)))
-        .with_same_site(SameSite::Lax);
+        .with_same_site(SameSite::None);
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(&database_url).await.unwrap();
