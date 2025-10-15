@@ -108,7 +108,7 @@ async fn main() {
             Method::OPTIONS,
         ])
         .allow_origin(
-            ["http://100.100.52.40:5173", "http://SE3Frontend:5173"].map(|s| s.parse().unwrap()),
+            ["http://localhost:5173", "http://SE3Frontend:80"].map(|s| s.parse().unwrap()),
         )
         .allow_credentials(true);
 
