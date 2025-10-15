@@ -14,7 +14,7 @@ use sea_orm::{Database, DatabaseConnection};
 use std::env;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
-use tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration};
+use tower_sessions::{cookie::{time::Duration, SameSite}, Expiry, SessionManagerLayer};
 use tower_sessions_redis_store::{
     RedisStore,
     fred::prelude::{ClientLike, Config, Pool, Server, ServerConfig},
@@ -95,7 +95,8 @@ async fn main() {
     let session_store = RedisStore::new(pool);
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
-        .with_expiry(Expiry::OnInactivity(Duration::days(1)));
+        .with_expiry(Expiry::OnInactivity(Duration::days(1)))
+        .with_same_site(SameSite::Lax);
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(&database_url).await.unwrap();
