@@ -1,4 +1,4 @@
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use entities::classroom;
 use nanoid::nanoid;
 use sea_orm::{
@@ -59,12 +59,27 @@ async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
+async fn get_classroom(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match classroom::Entity::find_by_id(id).one(&state.db).await {
+        Ok(Some(classroom)) => (StatusCode::OK, Json(classroom)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch classroom",
+        )
+            .into_response(),
+    }
+}
+
 pub fn classroom_router() -> Router<AppState> {
     Router::new().route("/", get(list_classrooms).post(create_classroom))
-    // .route(
-    //     "/classrooms/:id",
-    //     get(get_classroom)
-    //         .put(update_classroom)
-    //         .delete(delete_classroom),
-    // )
+    .route(
+        "/classrooms/:id",
+        get(get_classroom)
+            // .put(update_classroom)
+            // .delete(delete_classroom),
+    )
 }
