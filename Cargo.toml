@@ -18,6 +18,8 @@ sea-orm = { version = "2.0.0-rc", features = [
 tower-sessions = "0.14.0"
 axum-login = "0.18.0"
 tower-sessions-redis-store = "0.16.0"
-argon2 = {version = "0.5.3",features = ["password-hash"]}
+argon2 = { version = "0.5.3", features = ["password-hash"] }
 serde = "1.0.228"
 dotenv = "0.15.0"
+utoipa-scalar = { version = "0.3", features = ["axum"] }
+utoipa = { version = "5", features = ["axum_extras"] }

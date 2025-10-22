@@ -5,10 +5,11 @@ use crate::{
 use axum_login::{AuthUser, AuthnBackend, UserId};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::Deserialize;
+use utoipa::ToSchema;
 
 pub type AuthSession = axum_login::AuthSession<AuthBackend>;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct Credentials {
     pub email: String,
     pub password: String,

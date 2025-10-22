@@ -1,4 +1,10 @@
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::get,
+};
 use entities::classroom;
 use nanoid::nanoid;
 use sea_orm::{
@@ -7,20 +13,31 @@ use sea_orm::{
     EntityTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     AppState,
     entities::{self, sea_orm_active_enums::Status},
 };
 
-#[derive(Deserialize, Serialize)]
-struct CreateClassroomBody {
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct CreateClassroomBody {
     name: String,
     capacity: i32,
     location: String,
 }
 
-async fn create_classroom(
+#[utoipa::path(
+    post,
+    description = "Create new classroom",
+    path = "/classroom",
+    request_body = CreateClassroomBody,
+    responses(
+        (status = 201, description = "Classroom created successfully", body = classroom::Model),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn create_classroom(
     State(state): State<AppState>,
     Json(CreateClassroomBody {
         name,
@@ -48,7 +65,16 @@ async fn create_classroom(
     }
 }
 
-async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    description = "Get list of classroom",
+    path = "/classroom",
+    responses(
+        (status = 200, description = "List of classrooms", body = Vec<classroom::Model>),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
     match classroom::Entity::find().all(&state.db).await {
         Ok(classrooms) => (StatusCode::OK, Json(classrooms)).into_response(),
         Err(_) => (
@@ -59,7 +85,20 @@ async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-async fn get_classroom(
+#[utoipa::path(
+    get,
+    description = "Get classroom by ID",
+    path = "/classroom/{id}",
+    params(
+        ("id" = String, Path, description = "Classroom ID")
+    ),
+    responses(
+        (status = 200, description = "Classroom found", body = classroom::Model),
+        (status = 404, description = "Classroom not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_classroom(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
@@ -75,11 +114,11 @@ async fn get_classroom(
 }
 
 pub fn classroom_router() -> Router<AppState> {
-    Router::new().route("/", get(list_classrooms).post(create_classroom))
-    .route(
-        "/{id}",
-        get(get_classroom)
-            // .put(update_classroom)
-            // .delete(delete_classroom),
-    )
+    Router::new()
+        .route("/", get(list_classrooms).post(create_classroom))
+        .route(
+            "/{id}",
+            get(get_classroom), // .put(update_classroom)
+                                // .delete(delete_classroom),
+        )
 }

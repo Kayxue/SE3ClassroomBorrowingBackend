@@ -3,8 +3,9 @@
 use super::sea_orm_active_enums::Status;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema)]
 #[sea_orm(table_name = "classroom")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -15,7 +16,9 @@ pub struct Model {
     pub location: String,
     pub capacity: i32,
     pub status: Status,
+    #[schema(value_type = String, example = "2021-01-01T00:00:00+00:00")]
     pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = String, example = "2021-01-01T00:00:00+00:00")]
     pub updated_at: DateTimeWithTimeZone,
 }
 

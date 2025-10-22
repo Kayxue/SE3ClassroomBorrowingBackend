@@ -1,23 +1,24 @@
 use std::net::SocketAddr;
 
-use axum::{
-    Router,
-    extract::Path,
-    response::IntoResponse,
-    routing::get,
-};
+use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use axum_login::AuthManagerLayerBuilder;
 use dotenv::dotenv;
 use nanoid::nanoid;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
 use tower::ServiceBuilder;
-use tower_sessions::{cookie::{time::Duration, SameSite}, Expiry, SessionManagerLayer};
+use tower_sessions::{
+    Expiry, SessionManagerLayer,
+    cookie::{SameSite, time::Duration},
+};
 use tower_sessions_redis_store::{
     RedisStore,
     fred::prelude::{ClientLike, Config, Pool, Server, ServerConfig},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa::OpenApi;
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa_scalar::{Scalar, Servable};
 
 mod argonhasher;
 mod entities;
@@ -30,15 +31,42 @@ use routes::user::user_router;
 
 use crate::routes::classroom::classroom_router;
 
+#[utoipa::path(
+    get,
+    description = "Returns the Argon2 hash of the provided password",
+    path = "/argon2/{password}",
+    responses(
+        (status = 200, description = "Returns the Argon2 hash of the provided password", body = String),
+    ),
+    params(
+        ("password" = String, Path, description = "The password to be hashed"),
+    )
+)]
 async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
     let hash = hash(password.as_bytes()).await.unwrap();
     hash
 }
 
+#[utoipa::path(
+    get,
+    description = "Returns a newly generated NanoID",
+    path = "/nanoid",
+    responses(
+        (status = 200, description = "Returns a newly generated NanoID", body = String),
+    ),
+)]
 async fn nanoid() -> impl IntoResponse {
     nanoid!()
 }
 
+#[utoipa::path(
+    get,
+    description = "Returns a greeting message",
+    path = "/",
+    responses(
+        (status = 200, description = "Returns a greeting message", body = String),
+    ),
+)]
 async fn root() -> impl IntoResponse {
     "Hello, World!"
 }
@@ -47,6 +75,49 @@ async fn root() -> impl IntoResponse {
 struct AppState {
     db: DatabaseConnection,
 }
+
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "session_cookie",
+                SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new("id"))),
+            )
+        }
+    }
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        root,
+        nanoid,
+        argon2,
+        routes::user::register,
+        routes::user::login,
+        routes::user::logout,
+        routes::user::profile,
+        routes::classroom::create_classroom,
+        routes::classroom::get_classroom,
+        routes::classroom::list_classrooms,
+    ),
+    components(
+        schemas(
+            entities::user::Model,
+            entities::sea_orm_active_enums::Role,
+            loginsystem::Credentials,
+            routes::user::RegisterBody,
+            routes::classroom::CreateClassroomBody,
+            entities::classroom::Model,
+            entities::sea_orm_active_enums::Status,
+        )
+    ),
+    modifiers(&SecurityAddon),
+    info(title = "Classroom Management API", version = "1.0")
+)]
+struct ApiDoc;
 
 #[tokio::main]
 async fn main() {
@@ -111,6 +182,7 @@ async fn main() {
         .nest("/user", user_router())
         .nest("/classroom", classroom_router())
         .with_state(app_state)
+        .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
