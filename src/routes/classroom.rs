@@ -77,7 +77,7 @@ async fn get_classroom(
 pub fn classroom_router() -> Router<AppState> {
     Router::new().route("/", get(list_classrooms).post(create_classroom))
     .route(
-        "/classrooms/{id}",
+        "/{id}",
         get(get_classroom)
             // .put(update_classroom)
             // .delete(delete_classroom),
