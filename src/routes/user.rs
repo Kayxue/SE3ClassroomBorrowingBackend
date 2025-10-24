@@ -32,8 +32,9 @@ pub struct RegisterBody {
 
 #[utoipa::path(
     post,
+    tags = ["User"],
     description = "Register a new user",
-    path = "/user/register",
+    path = "/register",
     request_body(content = RegisterBody, description = "User registration data", content_type = "application/json"),
     responses(
         (status = 201, description = "User registered successfully", body = user::Model),
@@ -70,8 +71,9 @@ pub async fn register(
 
 #[utoipa::path(
     post,
+    tags = ["User"],
     description = "User login",
-    path = "/user/login",
+    path = "/login",
     request_body(content = Credentials, description = "User login credentials", content_type = "application/json"),
     responses(
         (status = 200, description = "User logged in successfully", body = user::Model),
@@ -100,8 +102,9 @@ pub async fn login(
 
 #[utoipa::path(
     get,
+    tags = ["User"],
     description = "User logout",
-    path = "/user/logout",
+    path = "/logout",
     responses(
         (status = 200, description = "User logged out successfully"),
         (status = 500, description = "Failed to log out"),
@@ -116,8 +119,9 @@ pub async fn logout(mut auth_session: AuthSession) -> impl IntoResponse {
 
 #[utoipa::path(
     get,
+    tags = ["User"],
     description = "Get user profile",
-    path = "/user/profile",
+    path = "/profile",
     responses(
         (status = 200, description = "User profile retrieved successfully", body = user::Model),
         (status = 401, description = "Unauthorized"),

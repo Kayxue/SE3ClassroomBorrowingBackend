@@ -34,6 +34,7 @@ use crate::routes::classroom::classroom_router;
 #[utoipa::path(
     get,
     description = "Returns the Argon2 hash of the provided password",
+    tags = ["Root"],
     path = "/argon2/{password}",
     responses(
         (status = 200, description = "Returns the Argon2 hash of the provided password", body = String),
@@ -50,6 +51,7 @@ async fn argon2(Path(password): Path<String>) -> impl IntoResponse {
 #[utoipa::path(
     get,
     description = "Returns a newly generated NanoID",
+    tags = ["Root"],
     path = "/nanoid",
     responses(
         (status = 200, description = "Returns a newly generated NanoID", body = String),
@@ -62,6 +64,7 @@ async fn nanoid() -> impl IntoResponse {
 #[utoipa::path(
     get,
     description = "Returns a greeting message",
+    tags = ["Root"],
     path = "/",
     responses(
         (status = 200, description = "Returns a greeting message", body = String),
@@ -91,31 +94,53 @@ impl utoipa::Modify for SecurityAddon {
 
 #[derive(OpenApi)]
 #[openapi(
+    tags(
+        (name = "User", description = "User endpoints")
+    ),
     paths(
-        root,
-        nanoid,
-        argon2,
         routes::user::register,
         routes::user::login,
         routes::user::logout,
         routes::user::profile,
+    ),
+    components(schemas(
+        entities::user::Model,
+        entities::sea_orm_active_enums::Role,
+        loginsystem::Credentials,
+        routes::user::RegisterBody,
+    ))
+)]
+struct UserApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
+        (name = "Classroom", description = "Classroom endpoints")
+    ),
+    paths(
         routes::classroom::create_classroom,
         routes::classroom::get_classroom,
         routes::classroom::list_classrooms,
     ),
-    components(
-        schemas(
-            entities::user::Model,
-            entities::sea_orm_active_enums::Role,
-            loginsystem::Credentials,
-            routes::user::RegisterBody,
-            routes::classroom::CreateClassroomBody,
-            entities::classroom::Model,
-            entities::sea_orm_active_enums::Status,
-        )
+    components(schemas(
+        routes::classroom::CreateClassroomBody,
+        entities::classroom::Model,
+        entities::sea_orm_active_enums::Status,
+    ))
+)]
+struct ClassroomApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi)),
+    tags((name = "Root", description = "Root endpoints")),
+    paths(
+        root,
+        nanoid,
+        argon2,
     ),
     modifiers(&SecurityAddon),
-    info(title = "Classroom Management API", version = "1.0"),
+    info(title = "Classroom Borrowing API", version = "1.0"),
     servers(
         (url = "/api", description = "Base API path when hosting"),
         (url = "/", description = "Base API path when running on local")

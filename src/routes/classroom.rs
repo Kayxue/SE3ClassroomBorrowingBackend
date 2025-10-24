@@ -29,8 +29,9 @@ pub struct CreateClassroomBody {
 
 #[utoipa::path(
     post,
+    tags = ["Classroom"],
     description = "Create new classroom",
-    path = "/classroom",
+    path = "/",
     request_body = CreateClassroomBody,
     responses(
         (status = 201, description = "Classroom created successfully", body = classroom::Model),
@@ -67,8 +68,9 @@ pub async fn create_classroom(
 
 #[utoipa::path(
     get,
+    tags = ["Classroom"],
     description = "Get list of classroom",
-    path = "/classroom",
+    path = "/",
     responses(
         (status = 200, description = "List of classrooms", body = Vec<classroom::Model>),
         (status = 500, description = "Internal server error")
@@ -87,8 +89,9 @@ pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse
 
 #[utoipa::path(
     get,
+    tags = ["Classroom"],
     description = "Get classroom by ID",
-    path = "/classroom/{id}",
+    path = "/{id}",
     params(
         ("id" = String, Path, description = "Classroom ID")
     ),
