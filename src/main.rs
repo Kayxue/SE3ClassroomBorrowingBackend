@@ -115,7 +115,11 @@ impl utoipa::Modify for SecurityAddon {
         )
     ),
     modifiers(&SecurityAddon),
-    info(title = "Classroom Management API", version = "1.0")
+    info(title = "Classroom Management API", version = "1.0"),
+    servers(
+        (url = "/api", description = "Base API path when hosting"),
+        (url = "/", description = "Base API path when running on local")
+    )
 )]
 struct ApiDoc;
 
