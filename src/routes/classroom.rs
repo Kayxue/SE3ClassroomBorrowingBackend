@@ -1,10 +1,7 @@
 use axum::{
-    Json, Router,
-    extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
+    body::Bytes, extract::{Path, State}, http::StatusCode, response::IntoResponse, routing::get, Json, Router
 };
+use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use crate::entities::classroom;
 use crate::entities::sea_orm_active_enums::ClassroomStatus;
 use nanoid::nanoid;
@@ -13,29 +10,30 @@ use sea_orm::{
     ActiveValue::{NotSet, Set},
     EntityTrait,
 };
-use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
     AppState,
 };
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(TryFromMultipart, ToSchema)]
 pub struct CreateClassroomBody {
     name: String,
     capacity: i32,
     location: String,
     room_code: String,
     description: String,
-    photo_url: String,
+    #[form_data(limit = "5MB")]
+    #[schema(value_type = String, format = "binary")]
+    photo: FieldData<Bytes>,
 }
 
 #[utoipa::path(
     post,
     tags = ["Classroom"],
     description = "Create new classroom",
-    path = "/",
-    request_body = CreateClassroomBody,
+    path = "",
+    request_body(content = CreateClassroomBody, content_type = "multipart/form-data"),
     responses(
         (status = 201, description = "Classroom created successfully", body = classroom::Model),
         (status = 500, description = "Internal server error")
@@ -43,15 +41,17 @@ pub struct CreateClassroomBody {
 )]
 pub async fn create_classroom(
     State(state): State<AppState>,
-    Json(CreateClassroomBody {
+    TypedMultipart(CreateClassroomBody {
         name,
         capacity,
         location,
         room_code,
         description,
-        photo_url,
-    }): Json<CreateClassroomBody>,
+        photo,
+    }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
+    //TODO: Handle photo upload to storage service (S3)
+    
     let new_classroom = classroom::ActiveModel {
         id: Set(nanoid!()),
         name: Set(name),
@@ -62,7 +62,7 @@ pub async fn create_classroom(
         updated_at: NotSet,
         room_code: Set(room_code),
         description: Set(description),
-        photo_url: Set(photo_url),
+        photo_url: Set("ecw".to_owned()),
     };
 
     match new_classroom.insert(&state.db).await {
@@ -79,7 +79,7 @@ pub async fn create_classroom(
     get,
     tags = ["Classroom"],
     description = "Get list of classroom",
-    path = "/",
+    path = "",
     responses(
         (status = 200, description = "List of classrooms", body = Vec<classroom::Model>),
         (status = 500, description = "Internal server error")
