@@ -19,13 +19,40 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub phone_number: String,
     pub role: Role,
-    #[schema(value_type = String, example = "2021-01-01T00:00:00+00:00")]
+    #[schema(value_type = String)]
     pub created_at: DateTimeWithTimeZone,
-    #[schema(value_type = String, example = "2021-01-01T00:00:00+00:00")]
+    #[schema(value_type = String)]
     pub updated_at: DateTimeWithTimeZone,
+    #[sea_orm(column_type = "Text")]
+    pub name: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::announcement::Entity")]
+    Announcement,
+    #[sea_orm(has_many = "super::booking_change_log::Entity")]
+    BookingChangeLog,
+    #[sea_orm(has_many = "super::notification_log::Entity")]
+    NotificationLog,
+}
+
+impl Related<super::announcement::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Announcement.def()
+    }
+}
+
+impl Related<super::booking_change_log::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::BookingChangeLog.def()
+    }
+}
+
+impl Related<super::notification_log::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::NotificationLog.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

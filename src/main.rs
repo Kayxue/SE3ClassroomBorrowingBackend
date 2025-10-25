@@ -125,7 +125,7 @@ struct UserApi;
     components(schemas(
         routes::classroom::CreateClassroomBody,
         entities::classroom::Model,
-        entities::sea_orm_active_enums::Status,
+        entities::sea_orm_active_enums::ClassroomStatus,
     ))
 )]
 struct ClassroomApi;

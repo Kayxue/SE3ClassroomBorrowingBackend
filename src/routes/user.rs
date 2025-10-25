@@ -28,6 +28,7 @@ pub struct RegisterBody {
     email: String,
     password: String,
     phone_number: String,
+    name: String,
 }
 
 #[utoipa::path(
@@ -48,6 +49,7 @@ pub async fn register(
         email,
         password,
         phone_number,
+        name,
     }): Json<RegisterBody>,
 ) -> impl IntoResponse {
     let hashed_password = hash(password.as_bytes()).await.unwrap();
@@ -61,6 +63,7 @@ pub async fn register(
         role: Set(Role::User),
         created_at: NotSet,
         updated_at: NotSet,
+        name: Set(name),
     };
 
     match new_user.insert(&state.db).await {

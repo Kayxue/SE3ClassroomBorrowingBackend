@@ -5,7 +5,8 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use entities::classroom;
+use crate::entities::classroom;
+use crate::entities::sea_orm_active_enums::ClassroomStatus;
 use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait,
@@ -17,7 +18,6 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState,
-    entities::{self, sea_orm_active_enums::Status},
 };
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -25,6 +25,9 @@ pub struct CreateClassroomBody {
     name: String,
     capacity: i32,
     location: String,
+    room_code: String,
+    description: String,
+    photo_url: String,
 }
 
 #[utoipa::path(
@@ -44,6 +47,9 @@ pub async fn create_classroom(
         name,
         capacity,
         location,
+        room_code,
+        description,
+        photo_url,
     }): Json<CreateClassroomBody>,
 ) -> impl IntoResponse {
     let new_classroom = classroom::ActiveModel {
@@ -51,9 +57,12 @@ pub async fn create_classroom(
         name: Set(name),
         capacity: Set(capacity),
         location: Set(location),
-        status: Set(Status::Available),
+        status: Set(ClassroomStatus::Available),
         created_at: NotSet,
         updated_at: NotSet,
+        room_code: Set(room_code),
+        description: Set(description),
+        photo_url: Set(photo_url),
     };
 
     match new_classroom.insert(&state.db).await {
