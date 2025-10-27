@@ -102,12 +102,14 @@ impl utoipa::Modify for SecurityAddon {
         routes::user::login,
         routes::user::logout,
         routes::user::profile,
+        routes::user::get_user,
     ),
     components(schemas(
         entities::user::Model,
         entities::sea_orm_active_enums::Role,
         loginsystem::Credentials,
         routes::user::RegisterBody,
+        routes::user::UserResponse,
     ))
 )]
 struct UserApi;
@@ -125,7 +127,7 @@ struct UserApi;
     components(schemas(
         routes::classroom::CreateClassroomBody,
         entities::classroom::Model,
-        entities::sea_orm_active_enums::Status,
+        entities::sea_orm_active_enums::ClassroomStatus,
     ))
 )]
 struct ClassroomApi;
@@ -144,6 +146,18 @@ struct ClassroomApi;
     servers(
         (url = "/api", description = "Base API path when hosting"),
         (url = "/", description = "Base API path when running on local")
+    ),
+    components(
+        schemas(
+            entities::user::Model,
+            entities::sea_orm_active_enums::Role,
+            loginsystem::Credentials,
+            routes::user::RegisterBody,
+            routes::classroom::CreateClassroomBody,
+            entities::classroom::Model,
+            entities::sea_orm_active_enums::ClassroomStatus,
+            routes::user::UserResponse,
+        )
     )
 )]
 struct ApiDoc;

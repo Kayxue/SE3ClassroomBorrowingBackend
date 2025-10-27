@@ -23,3 +23,6 @@ serde = "1.0.228"
 dotenv = "0.15.0"
 utoipa-scalar = { version = "0.3", features = ["axum"] }
 utoipa = { version = "5", features = ["axum_extras"] }
+axum_typed_multipart = "0.16.4"
+aws-config = "1.8.8"
+aws-sdk-s3 = "1.108.0"

@@ -4,21 +4,51 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "role")]
-pub enum Role {
-    #[sea_orm(string_value = "admin")]
-    Admin,
-    #[sea_orm(string_value = "user")]
-    User,
+#[derive(
+    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "BookingChangeAction"
+)]
+pub enum BookingChangeAction {
+    #[sea_orm(string_value = "approve")]
+    Approve,
+    #[sea_orm(string_value = "reject")]
+    Reject,
 }
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "status")]
-pub enum Status {
+#[derive(
+    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "ClassroomStatus")]
+pub enum ClassroomStatus {
     #[sea_orm(string_value = "available")]
     Available,
     #[sea_orm(string_value = "occupied")]
     Occupied,
     #[sea_orm(string_value = "maintenance")]
     Maintenance,
+}
+#[derive(
+    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "ReservationStatus")]
+pub enum ReservationStatus {
+    #[sea_orm(string_value = "pending")]
+    Pending,
+    #[sea_orm(string_value = "approved")]
+    Approved,
+    #[sea_orm(string_value = "rejected")]
+    Rejected,
+}
+#[derive(
+    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "Role")]
+pub enum Role {
+    #[sea_orm(string_value = "admin")]
+    Admin,
+    #[sea_orm(string_value = "user")]
+    User,
 }
