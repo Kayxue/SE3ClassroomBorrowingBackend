@@ -102,12 +102,14 @@ impl utoipa::Modify for SecurityAddon {
         routes::user::login,
         routes::user::logout,
         routes::user::profile,
+        routes::user::get_user,
     ),
     components(schemas(
         entities::user::Model,
         entities::sea_orm_active_enums::Role,
         loginsystem::Credentials,
         routes::user::RegisterBody,
+        routes::user::UserResponse,
     ))
 )]
 struct UserApi;
@@ -154,6 +156,7 @@ struct ClassroomApi;
             routes::classroom::CreateClassroomBody,
             entities::classroom::Model,
             entities::sea_orm_active_enums::ClassroomStatus,
+            routes::user::UserResponse,
         )
     )
 )]
