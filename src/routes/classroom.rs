@@ -36,7 +36,7 @@ pub struct CreateClassroomBody {
     request_body(content = CreateClassroomBody, content_type = "multipart/form-data"),
     responses(
         (status = 201, description = "Classroom created successfully", body = classroom::Model),
-        (status = 500, description = "Internal server error")
+        (status = 500, description = "Internal server error", body = String),
     )
 )]
 pub async fn create_classroom(
@@ -82,7 +82,7 @@ pub async fn create_classroom(
     path = "",
     responses(
         (status = 200, description = "List of classrooms", body = Vec<classroom::Model>),
-        (status = 500, description = "Internal server error")
+        (status = 500, description = "Internal server error", body = String),
     )
 )]
 pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
@@ -106,8 +106,8 @@ pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse
     ),
     responses(
         (status = 200, description = "Classroom found", body = classroom::Model),
-        (status = 404, description = "Classroom not found"),
-        (status = 500, description = "Internal server error")
+        (status = 404, description = "Classroom not found", body = String),
+        (status = 500, description = "Internal server error", body = String),
     )
 )]
 pub async fn get_classroom(

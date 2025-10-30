@@ -76,7 +76,7 @@ impl From<user::Model> for UserResponse {
     request_body(content = RegisterBody, description = "User registration data", content_type = "application/json"),
     responses(
         (status = 201, description = "User registered successfully", body = UserResponse),
-        (status = 500, description = "Failed to create user"),
+        (status = 500, description = "Failed to create user", body = String),
     )
 )]
 pub async fn register(
@@ -121,8 +121,8 @@ pub async fn register(
     request_body(content = Credentials, description = "User login credentials", content_type = "application/json"),
     responses(
         (status = 200, description = "User logged in successfully", body = UserResponse),
-        (status = 401, description = "Invalid credentials"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Invalid credentials", body = String),
+        (status = 500, description = "Internal server error", body = String),
     )
 )]
 pub async fn login(
@@ -152,7 +152,7 @@ pub async fn login(
     path = "/logout",
     responses(
         (status = 200, description = "User logged out successfully"),
-        (status = 500, description = "Failed to log out"),
+        (status = 500, description = "Failed to log out", body = String),
     )
 )]
 pub async fn logout(mut auth_session: AuthSession) -> impl IntoResponse {
@@ -190,8 +190,8 @@ async fn profile(session: AuthSession) -> impl IntoResponse {
     ),
     responses(
         (status = 200, description = "User found", body = UserResponse),
-        (status = 404, description = "User not found"),
-        (status = 500, description = "Internal server error")
+        (status = 404, description = "User not found", body = String),
+        (status = 500, description = "Internal server error", body = String),
     )
 )]
 pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
@@ -212,10 +212,10 @@ pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> 
     path = "/update-password",
     request_body(content = UpdatePasswordBody, description = "User password update data", content_type = "application/json"),
     responses(
-        (status = 200, description = "Password updated successfully"),
-        (status = 400, description = "New password and confirm password are not same"),
+        (status = 200, description = "Password updated successfully", body = String),
+        (status = 400, description = "New password and confirm password are not same", body = String),
         (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Internal server error")
+        (status = 500, description = "Internal server error", body = String),
     ),
     security(
         ("session_cookie" = [])
