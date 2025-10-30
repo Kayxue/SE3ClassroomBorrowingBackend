@@ -9,7 +9,7 @@ use axum_login::login_required;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
-    EntityTrait,
+    EntityTrait, prelude::DateTimeWithTimeZone,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -47,9 +47,9 @@ pub struct UserResponse {
     pub phone_number: String,
     pub role: Role,
     #[schema(value_type = String)]
-    pub created_at: sea_orm::prelude::DateTimeWithTimeZone,
+    pub created_at: DateTimeWithTimeZone,
     #[schema(value_type = String)]
-    pub updated_at: sea_orm::prelude::DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
     pub name: String,
 }
 
