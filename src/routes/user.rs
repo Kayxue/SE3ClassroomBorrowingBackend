@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use axum_login::login_required;
 use sea_orm::{
@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState,
-    argonhasher::hash,
+    argonhasher::{hash, verify},
     entities::{sea_orm_active_enums::Role, user},
     loginsystem::{AuthBackend, AuthSession, Credentials},
 };
@@ -30,6 +30,13 @@ pub struct RegisterBody {
     password: String,
     phone_number: String,
     name: String,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct UpdatePasswordBody {
+    old_password: String,
+    new_password: String,
+    confirm: String,
 }
 
 #[derive(Serialize, Deserialize, ToSchema, Clone)]
@@ -74,15 +81,16 @@ impl From<user::Model> for UserResponse {
 )]
 pub async fn register(
     State(state): State<AppState>,
-    Json(RegisterBody {
+    Json(body): Json<RegisterBody>,
+) -> impl IntoResponse {
+    let RegisterBody {
         username,
         email,
         password,
         phone_number,
         name,
-    }): Json<RegisterBody>,
-) -> impl IntoResponse {
-    let hashed_password = hash(password.as_bytes()).await.unwrap();
+    } = body;
+    let hashed_password = hash(password).await.unwrap();
 
     let new_user = user::ActiveModel {
         id: Set(nanoid!()),
@@ -100,7 +108,7 @@ pub async fn register(
         Ok(user) => {
             let user_response = UserResponse::from(user);
             (StatusCode::CREATED, Json(user_response)).into_response()
-        },
+        }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response(),
     }
 }
@@ -186,21 +194,64 @@ async fn profile(session: AuthSession) -> impl IntoResponse {
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn get_user(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     match user::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(user)) => {
             let user_response = UserResponse::from(user);
             (StatusCode::OK, Json(user_response)).into_response()
-        },
+        }
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response(),
+    }
+}
+
+#[utoipa::path(
+    put,
+    tags = ["User"],
+    description = "Update user password",
+    path = "/update-password",
+    request_body(content = UpdatePasswordBody, description = "User password update data", content_type = "application/json"),
+    responses(
+        (status = 200, description = "Password updated successfully"),
+        (status = 400, description = "New password and confirm password are not same"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("session_cookie" = [])
+    )
+)]
+pub async fn update_password(
+    session: AuthSession,
+    State(state): State<AppState>,
+    Json(body): Json<UpdatePasswordBody>,
+) -> impl IntoResponse {
+    let UpdatePasswordBody {
+        old_password,
+        new_password,
+        confirm,
+    } = body;
+    if new_password != confirm {
+        return (
+            StatusCode::BAD_REQUEST,
+            "New password and confirm password are not same",
+        );
+    }
+    let user_current = session.user.unwrap();
+    let old_hashed_password = &user_current.password;
+    if verify(old_password, old_hashed_password).await.is_err() {
+        return (StatusCode::BAD_REQUEST, "Old password is not correct");
+    }
+
+    let mut new_user: user::ActiveModel = user_current.into();
+    let new_hashed_password = hash(new_password).await.unwrap();
+    new_user.password = Set(new_hashed_password);
+    match new_user.update(&state.db).await {
+        Ok(_) => (StatusCode::OK, "Password updated successfully"),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to fetch user",
-        )
-            .into_response(),
+            "Failed to update user password",
+        ),
     }
 }
 
@@ -214,4 +265,8 @@ pub fn user_router() -> Router<AppState> {
         )
         .route("/register", post(register))
         .route("/{id}", get(get_user))
+        .route(
+            "/update-password",
+            put(update_password).route_layer(login_required!(AuthBackend)),
+        )
 }
