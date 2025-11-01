@@ -46,6 +46,7 @@ pub enum ReservationStatus {
     Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
 )]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "Role")]
+#[derive(Hash)]
 pub enum Role {
     #[sea_orm(string_value = "admin")]
     Admin,

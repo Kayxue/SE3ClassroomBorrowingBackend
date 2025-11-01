@@ -28,8 +28,8 @@ mod routes;
 use argonhasher::hash;
 use loginsystem::AuthBackend;
 use routes::user::user_router;
-
-use crate::routes::classroom::classroom_router;
+use routes::classroom::classroom_router;
+use routes::reservation::reservation_router;
 
 #[utoipa::path(
     get,
@@ -95,6 +95,22 @@ impl utoipa::Modify for SecurityAddon {
 #[derive(OpenApi)]
 #[openapi(
     tags(
+        (name = "Reservation", description = "Reservation endpoints")
+    ),
+    paths(
+        routes::reservation::review_reservation,
+    ),
+    components(schemas(
+        entities::reservation::Model,
+        entities::sea_orm_active_enums::ReservationStatus,
+        routes::reservation::ReviewReservationBody,
+    ))
+)]
+struct ReservationApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
         (name = "User", description = "User endpoints")
     ),
     paths(
@@ -136,7 +152,7 @@ struct ClassroomApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi)),
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi)),
     tags((name = "Root", description = "Root endpoints")),
     paths(
         root,
@@ -160,6 +176,9 @@ struct ClassroomApi;
             entities::sea_orm_active_enums::ClassroomStatus,
             routes::user::UserResponse,
             routes::user::UpdatePasswordBody,
+            routes::reservation::ReviewReservationBody,
+            entities::reservation::Model,
+            entities::sea_orm_active_enums::ReservationStatus,
         )
     )
 )]
@@ -227,6 +246,7 @@ async fn main() {
         .route("/argon2/{password}", get(argon2))
         .nest("/user", user_router())
         .nest("/classroom", classroom_router())
+        .nest("/reservation", reservation_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
