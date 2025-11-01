@@ -1,9 +1,16 @@
+use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
+use crate::{entities::classroom, loginsystem::AuthBackend};
+use axum::routing::post;
 use axum::{
-    body::Bytes, extract::{Path, State}, http::StatusCode, response::IntoResponse, routing::get, Json, Router
+    Json, Router,
+    body::Bytes,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::get,
 };
+use axum_login::permission_required;
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
-use crate::entities::classroom;
-use crate::entities::sea_orm_active_enums::ClassroomStatus;
 use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait,
@@ -12,9 +19,7 @@ use sea_orm::{
 };
 use utoipa::ToSchema;
 
-use crate::{
-    AppState,
-};
+use crate::AppState;
 
 #[derive(TryFromMultipart, ToSchema)]
 pub struct CreateClassroomBody {
@@ -51,7 +56,7 @@ pub async fn create_classroom(
     }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
     //TODO: Handle photo upload to storage service (S3)
-    
+
     let new_classroom = classroom::ActiveModel {
         id: Set(nanoid!()),
         name: Set(name),
@@ -126,11 +131,16 @@ pub async fn get_classroom(
 }
 
 pub fn classroom_router() -> Router<AppState> {
+    let admin_only_route = Router::new()
+        .route("/", post(create_classroom))
+        .route_layer(permission_required!(AuthBackend, Role::Admin));
+    
     Router::new()
-        .route("/", get(list_classrooms).post(create_classroom))
+        .route("/", get(list_classrooms))
         .route(
             "/{id}",
             get(get_classroom), // .put(update_classroom)
                                 // .delete(delete_classroom),
         )
+        .merge(admin_only_route)
 }

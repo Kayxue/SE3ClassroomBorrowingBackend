@@ -1,8 +1,8 @@
 use crate::{
     argonhasher::verify,
-    entities::{self, prelude::*, *},
+    entities::{self, prelude::*, sea_orm_active_enums::Role, *},
 };
-use axum_login::{AuthUser, AuthnBackend, UserId};
+use axum_login::{AuthUser, AuthnBackend, AuthzBackend, UserId};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -63,5 +63,17 @@ impl AuthnBackend for AuthBackend {
     async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
         let user = User::find_by_id(user_id.to_owned()).one(&self.db).await?;
         Ok(user)
+    }
+}
+
+impl AuthzBackend for AuthBackend {
+    type Permission = Role;
+
+    async fn has_perm(
+        &self,
+        user: &Self::User,
+        perm: Self::Permission,
+    ) -> Result<bool, Self::Error> {
+        Ok(user.role == perm)
     }
 }
