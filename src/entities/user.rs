@@ -12,6 +12,8 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text", unique)]
     pub username: String,
+    #[sea_orm(column_type = "Text")]
+    pub name: String,
     #[sea_orm(column_type = "Text", unique)]
     pub email: String,
     #[sea_orm(column_type = "Text")]
@@ -23,8 +25,6 @@ pub struct Model {
     pub created_at: DateTimeWithTimeZone,
     #[schema(value_type = String)]
     pub updated_at: DateTimeWithTimeZone,
-    #[sea_orm(column_type = "Text")]
-    pub name: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

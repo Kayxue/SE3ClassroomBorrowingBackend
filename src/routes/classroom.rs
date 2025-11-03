@@ -55,7 +55,7 @@ pub async fn create_classroom(
         photo,
     }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
-    //TODO: Handle photo upload to storage service (S3)
+    //TODO: Handle photo upload to storage service
 
     let new_classroom = classroom::ActiveModel {
         id: Set(nanoid!()),

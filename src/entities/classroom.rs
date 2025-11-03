@@ -10,20 +10,20 @@ use utoipa::ToSchema;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
+    #[sea_orm(column_type = "Text", unique)]
+    pub room_code: String,
     #[sea_orm(column_type = "Text")]
     pub name: String,
     #[sea_orm(column_type = "Text")]
     pub location: String,
     pub capacity: i32,
+    #[sea_orm(column_type = "Text")]
+    pub description: String,
     pub status: ClassroomStatus,
     #[schema(value_type = String)]
     pub created_at: DateTimeWithTimeZone,
     #[schema(value_type = String)]
     pub updated_at: DateTimeWithTimeZone,
-    #[sea_orm(column_type = "Text", unique)]
-    pub room_code: String,
-    #[sea_orm(column_type = "Text")]
-    pub description: String,
     #[sea_orm(column_type = "Text")]
     pub photo_url: String,
 }
