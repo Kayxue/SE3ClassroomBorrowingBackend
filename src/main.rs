@@ -27,9 +27,9 @@ mod routes;
 
 use argonhasher::hash;
 use loginsystem::AuthBackend;
-use routes::user::user_router;
 use routes::classroom::classroom_router;
 use routes::reservation::reservation_router;
+use routes::user::user_router;
 
 #[utoipa::path(
     get,
@@ -238,6 +238,8 @@ async fn main() {
     let auth_backend = AuthBackend::new(db.clone());
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
 
+    let imgbb_api_key = env::var("IMGBB_API_KEY").expect("IMGBB_API_KEY must be set");
+
     let app_state = AppState { db: db };
 
     let app = Router::new()
@@ -245,7 +247,7 @@ async fn main() {
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2))
         .nest("/user", user_router())
-        .nest("/classroom", classroom_router())
+        .nest("/classroom", classroom_router(imgbb_api_key))
         .nest("/reservation", reservation_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
@@ -257,4 +259,3 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
-

@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
 use crate::{entities::classroom, loginsystem::AuthBackend};
 use axum::routing::post;
@@ -11,7 +13,11 @@ use axum::{
 };
 use axum_login::permission_required;
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use nanoid::nanoid;
+use reqwest::multipart::Part;
+use reqwest::{Client, multipart};
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
@@ -20,6 +26,9 @@ use sea_orm::{
 use utoipa::ToSchema;
 
 use crate::AppState;
+
+static IMGBB_API_KEY: OnceLock<String> = OnceLock::new();
+static IMGBB_CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
 
 #[derive(TryFromMultipart, ToSchema)]
 pub struct CreateClassroomBody {
@@ -56,6 +65,19 @@ pub async fn create_classroom(
     }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
     //TODO: Handle photo upload to storage service
+    let key = IMGBB_API_KEY.get().expect("IMGBB_API_KEY not set").clone();
+    let client = IMGBB_CLIENT.get().expect("IMGBB_CLIENT not set").clone();
+
+    let body = multipart::Form::new().text("key", key).part(
+        "image",
+        Part::bytes(photo.contents.to_vec()).file_name(photo.metadata.file_name.unwrap()),
+    );
+
+    let response = client
+        .post("https://api.imgbb.com/1/upload")
+        .multipart(body)
+        .send()
+        .await;
 
     let new_classroom = classroom::ActiveModel {
         id: Set(nanoid!()),
@@ -130,11 +152,19 @@ pub async fn get_classroom(
     }
 }
 
-pub fn classroom_router() -> Router<AppState> {
+pub fn classroom_router(imgbb_api_key: String) -> Router<AppState> {
+    IMGBB_API_KEY
+        .set(imgbb_api_key)
+        .expect("IMGBB_API_KEY already set");
+    let client_arc = Arc::new(Client::new());
+    IMGBB_CLIENT
+        .set(client_arc)
+        .expect("IMGBB_CLIENT already set");
+
     let admin_only_route = Router::new()
         .route("/", post(create_classroom))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
-    
+
     Router::new()
         .route("/", get(list_classrooms))
         .route(
