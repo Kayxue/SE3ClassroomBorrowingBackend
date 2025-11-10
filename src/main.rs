@@ -250,7 +250,8 @@ async fn main() {
     let auth_backend = AuthBackend::new(db.clone());
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
 
-    let imgbb_api_key = env::var("IMGBB_API_KEY").expect("IMGBB_API_KEY must be set");
+    let image_service_ip = env::var("IMAGE_SERVICE_IP").expect("IMAGE_SERVICE_IP must be set");
+    let image_service_api_key = env::var("IMAGE_SERVICE_API_KEY").expect("IMAGE_SERVICE_API_KEY must be set");
 
     let app_state = AppState { db: db };
 
@@ -259,7 +260,7 @@ async fn main() {
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2))
         .nest("/user", user_router())
-        .nest("/classroom", classroom_router(imgbb_api_key))
+        .nest("/classroom", classroom_router(image_service_ip,image_service_api_key))
         .nest("/reservation", reservation_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))

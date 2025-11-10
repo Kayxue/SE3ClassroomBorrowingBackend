@@ -29,8 +29,9 @@ use utoipa::ToSchema;
 
 use crate::AppState;
 
-static IMGBB_API_KEY: OnceLock<String> = OnceLock::new();
-static IMGBB_CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
+static IMAGE_SERVICE_API_KEY: OnceLock<String> = OnceLock::new();
+static IMAGE_SERVICE_IP: OnceLock<String> = OnceLock::new();
+static IMAGE_SERVICE_CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
 
 #[derive(TryFromMultipart, ToSchema)]
 pub struct CreateClassroomBody {
@@ -42,43 +43,6 @@ pub struct CreateClassroomBody {
     #[form_data(limit = "5MB")]
     #[schema(value_type = String, format = "binary")]
     photo: FieldData<Bytes>,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct ImgBBResponseData{
-    pub status: u16,
-    pub success: bool,
-    pub data: ImgBBImageData,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct ImgBBImageData{
-    pub id: String,
-    pub title: String,
-    pub url_viewer: String,
-    pub url: String,
-    pub display_url: String,
-    pub width: u32,
-    pub height: u32,
-    pub size: u32,
-    pub time: u32,
-    pub expiration: u32,
-    pub image: ImgBBImageInfo,
-    pub thumb: ImgBBImageInfo,
-    pub medium: ImgBBImageInfo,
-    pub delete_url: String,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct ImgBBImageInfo{
-    pub filename: String,
-    pub name: String,
-    pub mime: String,
-    pub extension: String,
-    pub url: String,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -137,22 +101,30 @@ pub async fn create_classroom(
         photo,
     }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
-    //TODO: Change to custom photo upload to storage service
-    let key = IMGBB_API_KEY.get().expect("IMGBB_API_KEY not set").clone();
-    let client = IMGBB_CLIENT.get().expect("IMGBB_CLIENT not set").clone();
+    let url = IMAGE_SERVICE_IP.get().expect("IMAGE_SERVICE_IP not set").clone();
+    let key = IMAGE_SERVICE_API_KEY.get().expect("IMAGE_SERVICE_API_KEY not set").clone();
+    let client = IMAGE_SERVICE_CLIENT.get().expect("IMAGE_SERVICE_CLIENT not set").clone();
 
-    let body = multipart::Form::new().text("key", key).part(
+    let body = multipart::Form::new().part(
         "image",
         Part::bytes(photo.contents.to_vec()).file_name(photo.metadata.file_name.unwrap()),
     );
 
     let response = match client
-        .post("https://api.imgbb.com/1/upload")
+        .post(format!("{}/", url))
         .multipart(body)
+        .header("key", key)
         .send()
         .await
     {
-        Ok(resp) => resp.json::<ImgBBResponseData>().await.unwrap(),
+        Ok(resp) => {
+            match resp.status() {
+                StatusCode::CREATED => resp.text().await.unwrap(),
+                _ => {
+                    return (StatusCode::BAD_REQUEST, resp.text().await.unwrap()).into_response();
+                }
+            }
+        },
         Err(_) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to upload image").into_response();
         }
@@ -168,7 +140,7 @@ pub async fn create_classroom(
         updated_at: NotSet,
         room_code: Set(room_code),
         description: Set(description),
-        photo_url: Set(response.data.url),
+        photo_id: Set(response),
     };
 
     match new_classroom.insert(&state.db).await {
@@ -300,14 +272,17 @@ pub async fn get_classroom(
     }
 }
 
-pub fn classroom_router(imgbb_api_key: String) -> Router<AppState> {
-    IMGBB_API_KEY
-        .set(imgbb_api_key)
-        .expect("IMGBB_API_KEY already set");
+pub fn classroom_router(image_service_url:String,image_service_api_key: String) -> Router<AppState> {
+    IMAGE_SERVICE_IP
+        .set(image_service_url)
+        .expect("IMAGE_SERVICE_IP already set");
+    IMAGE_SERVICE_API_KEY
+        .set(image_service_api_key)
+        .expect("IMAGE_SERVICE_API_KEY already set");
     let client_arc = Arc::new(Client::new());
-    IMGBB_CLIENT
+    IMAGE_SERVICE_CLIENT
         .set(client_arc)
-        .expect("IMGBB_CLIENT already set");
+        .expect("IMAGE_SERVICE_CLIENT already set");
 
     let admin_only_route = Router::new()
         .route("/", post(create_classroom))

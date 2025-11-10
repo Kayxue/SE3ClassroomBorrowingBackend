@@ -25,7 +25,7 @@ pub struct Model {
     #[schema(value_type = String)]
     pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(column_type = "Text")]
-    pub photo_url: String,
+    pub photo_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
