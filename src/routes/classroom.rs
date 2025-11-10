@@ -1,7 +1,9 @@
 use std::sync::{Arc, OnceLock};
 
+use crate::entities::{key, reservation};
 use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
 use crate::{entities::classroom, loginsystem::AuthBackend};
+use axum::extract::Query;
 use axum::routing::post;
 use axum::{
     Json, Router,
@@ -16,12 +18,13 @@ use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use nanoid::nanoid;
 use reqwest::multipart::Part;
 use reqwest::{Client, multipart};
+use sea_orm::ModelTrait;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
     EntityTrait,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::AppState;
@@ -42,6 +45,7 @@ pub struct CreateClassroomBody {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct ImgBBResponseData{
     pub status: u16,
     pub success: bool,
@@ -49,6 +53,7 @@ struct ImgBBResponseData{
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct ImgBBImageData{
     pub id: String,
     pub title: String,
@@ -67,12 +72,47 @@ struct ImgBBImageData{
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct ImgBBImageInfo{
     pub filename: String,
     pub name: String,
     pub mime: String,
     pub extension: String,
     pub url: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct GetClassroomQuery{
+    with_keys: Option<bool>,
+    with_reservations: Option<bool>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct GetClassroomKeyReservationResponse{
+    classroom: classroom::Model,
+    keys: Vec<key::Model>,
+    reservations: Vec<reservation::Model>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct GetClassroomKeyResponse{
+    classroom: classroom::Model,
+    keys: Vec<key::Model>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct GetClassroomReservationResponse{
+    classroom: classroom::Model,
+    reservations: Vec<reservation::Model>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum GetClassroomResponse {
+    Classroom(classroom::Model),
+    ClassroomWithKeys(GetClassroomKeyResponse),
+    ClassroomWithReservations(GetClassroomReservationResponse),
+    ClassroomWithKeysAndReservations(GetClassroomKeyReservationResponse),
 }
 
 #[utoipa::path(
@@ -165,23 +205,92 @@ pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse
 #[utoipa::path(
     get,
     tags = ["Classroom"],
-    description = "Get classroom by ID",
+    description = "Get classroom by ID with optional related data. Use query parameters to include keys and/or reservations.",
     path = "/{id}",
     params(
-        ("id" = String, Path, description = "Classroom ID")
+        ("id" = String, Path, description = "Classroom ID"),
+        ("with_keys" = Option<bool>, Query, description = "Include related keys in response"),
+        ("with_reservations" = Option<bool>, Query, description = "Include related reservations in response")
     ),
     responses(
-        (status = 200, description = "Classroom found", body = classroom::Model),
+        (status = 200, description = "Classroom found. Response format varies based on query parameters: \n- No params: Returns classroom object only\n- with_keys=true: Returns ClassroomWithKeys\n- with_reservations=true: Returns ClassroomWithReservations\n- Both params=true: Returns ClassroomWithKeysAndReservations", body = GetClassroomResponse),
         (status = 404, description = "Classroom not found", body = String),
         (status = 500, description = "Internal server error", body = String),
     )
 )]
 pub async fn get_classroom(
+    Query(query): Query<GetClassroomQuery>,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    let GetClassroomQuery {
+        with_keys,
+        with_reservations,
+    } = query;
+
     match classroom::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(classroom)) => (StatusCode::OK, Json(classroom)).into_response(),
+        Ok(Some(classroom)) => {
+            match (with_keys,with_reservations) {
+                (Some(true), Some(true)) => {
+                    // Fetch keys and reservations separately
+                    let keys_result = classroom
+                        .find_related(crate::entities::key::Entity)
+                        .all(&state.db)
+                        .await;
+                    
+                    let reservations_result = classroom
+                        .find_related(crate::entities::reservation::Entity)
+                        .all(&state.db)
+                        .await;
+                    
+                    match (keys_result, reservations_result) {
+                        (Ok(keys), Ok(reservations)) => {
+                            // Combine the results
+                            let response = serde_json::json!({
+                                "classroom": classroom,
+                                "keys": keys,
+                                "reservations": reservations,
+                            });
+                            (StatusCode::OK, Json(response)).into_response()
+                        },
+                        _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch classroom with keys and reservations").into_response(),
+                    }
+                },
+                (Some(true), _) => {
+                    let keys_result = classroom
+                        .find_related(crate::entities::key::Entity)
+                        .all(&state.db)
+                        .await;
+                    match keys_result {
+                        Ok(keys) => {
+                            let response = serde_json::json!({
+                                "classroom": classroom,
+                                "keys": keys,
+                            });
+                            (StatusCode::OK, Json(response)).into_response()
+                        },
+                        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch classroom with keys").into_response(),
+                    }
+                },
+                (_, Some(true)) => {
+                    let reservations_result = classroom
+                        .find_related(crate::entities::reservation::Entity)
+                        .all(&state.db)
+                        .await;
+                    match reservations_result {
+                        Ok(reservations) => {
+                            let response = serde_json::json!({
+                                "classroom": classroom,
+                                "reservations": reservations,
+                            });
+                            (StatusCode::OK, Json(response)).into_response()
+                        },
+                        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch classroom with reservations").into_response(),
+                    }
+                },
+                _ => (StatusCode::OK, Json(classroom)).into_response(),
+            }
+        },
         Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,

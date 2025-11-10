@@ -146,6 +146,12 @@ struct UserApi;
         routes::classroom::CreateClassroomBody,
         entities::classroom::Model,
         entities::sea_orm_active_enums::ClassroomStatus,
+        routes::classroom::GetClassroomResponse,
+        routes::classroom::GetClassroomKeyResponse,
+        routes::classroom::GetClassroomReservationResponse,
+        routes::classroom::GetClassroomKeyReservationResponse,
+        entities::key::Model,
+        entities::reservation::Model,
     ))
 )]
 struct ClassroomApi;
@@ -179,6 +185,12 @@ struct ClassroomApi;
             routes::reservation::ReviewReservationBody,
             entities::reservation::Model,
             entities::sea_orm_active_enums::ReservationStatus,
+            routes::classroom::GetClassroomResponse,
+            routes::classroom::GetClassroomKeyResponse,
+            routes::classroom::GetClassroomReservationResponse,
+            routes::classroom::GetClassroomKeyReservationResponse,
+            entities::key::Model,
+            entities::reservation::Model,
         )
     )
 )]
