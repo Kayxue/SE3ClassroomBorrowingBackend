@@ -10,7 +10,6 @@ dependencies = [
  "axum",
  "axum-login",
  "axum_typed_multipart",
- "base64",
  "dotenv",
  "nanoid",
  "redis",
