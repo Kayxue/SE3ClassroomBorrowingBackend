@@ -13,8 +13,6 @@ use axum::{
 };
 use axum_login::permission_required;
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
-use base64::Engine;
-use base64::prelude::BASE64_STANDARD;
 use nanoid::nanoid;
 use reqwest::multipart::Part;
 use reqwest::{Client, multipart};
@@ -23,6 +21,7 @@ use sea_orm::{
     ActiveValue::{NotSet, Set},
     EntityTrait,
 };
+use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::AppState;
@@ -40,6 +39,40 @@ pub struct CreateClassroomBody {
     #[form_data(limit = "5MB")]
     #[schema(value_type = String, format = "binary")]
     photo: FieldData<Bytes>,
+}
+
+#[derive(Deserialize)]
+struct ImgBBResponseData{
+    pub status: u16,
+    pub success: bool,
+    pub data: ImgBBImageData,
+}
+
+#[derive(Deserialize)]
+struct ImgBBImageData{
+    pub id: String,
+    pub title: String,
+    pub url_viewer: String,
+    pub url: String,
+    pub display_url: String,
+    pub width: u32,
+    pub height: u32,
+    pub size: u32,
+    pub time: u32,
+    pub expiration: u32,
+    pub image: ImgBBImageInfo,
+    pub thumb: ImgBBImageInfo,
+    pub medium: ImgBBImageInfo,
+    pub delete_url: String,
+}
+
+#[derive(Deserialize)]
+struct ImgBBImageInfo{
+    pub filename: String,
+    pub name: String,
+    pub mime: String,
+    pub extension: String,
+    pub url: String,
 }
 
 #[utoipa::path(
@@ -64,7 +97,7 @@ pub async fn create_classroom(
         photo,
     }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
-    //TODO: Handle photo upload to storage service
+    //TODO: Change to custom photo upload to storage service
     let key = IMGBB_API_KEY.get().expect("IMGBB_API_KEY not set").clone();
     let client = IMGBB_CLIENT.get().expect("IMGBB_CLIENT not set").clone();
 
@@ -73,11 +106,17 @@ pub async fn create_classroom(
         Part::bytes(photo.contents.to_vec()).file_name(photo.metadata.file_name.unwrap()),
     );
 
-    let response = client
+    let response = match client
         .post("https://api.imgbb.com/1/upload")
         .multipart(body)
         .send()
-        .await;
+        .await
+    {
+        Ok(resp) => resp.json::<ImgBBResponseData>().await.unwrap(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to upload image").into_response();
+        }
+    };
 
     let new_classroom = classroom::ActiveModel {
         id: Set(nanoid!()),
@@ -89,7 +128,7 @@ pub async fn create_classroom(
         updated_at: NotSet,
         room_code: Set(room_code),
         description: Set(description),
-        photo_url: Set("ecw".to_owned()),
+        photo_url: Set(response.data.url),
     };
 
     match new_classroom.insert(&state.db).await {
