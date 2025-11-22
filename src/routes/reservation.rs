@@ -8,9 +8,9 @@ use axum::{
 use axum_login::{permission_required, login_required};
 use sea_orm::{
     ActiveModelTrait, EntityTrait,
-    ActiveValue::{Set, NotSet},
+    ActiveValue::Set
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
@@ -78,79 +78,6 @@ pub async fn create_reservation(
 }
 
 // ===============================
-//   Update Reservation (User/Admin)
-// ===============================
-#[derive(Deserialize, ToSchema)]
-pub struct UpdateReservationBody {
-    pub purpose: Option<String>,
-    pub start_time: Option<String>,
-    pub end_time: Option<String>,
-}
-
-#[utoipa::path(
-    put,
-    tags = ["Reservation"],
-    description = "Update a classroom reservation",
-    path = "/{id}",
-    request_body(content = UpdateReservationBody, content_type = "application/json"),
-    responses(
-        (status = 200, description = "Reservation updated successfully", body = reservation::Model),
-        (status = 404, description = "Reservation not found"),
-        (status = 500, description = "Failed to update reservation")
-    ),
-    params(
-        ("id" = String, Path)
-    ),
-    security(("session_cookie" = []))
-)]
-pub async fn update_reservation(
-    session: AuthSession,
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(body): Json<UpdateReservationBody>,
-) -> impl IntoResponse {
-    let user = match session.user {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
-
-    match reservation::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(mut reservation)) => {
-            // Only allow user to update their own reservation
-            if reservation.user_id != Some(user.id) {
-                return (StatusCode::FORBIDDEN, "You cannot update someone else's reservation").into_response();
-            }
-
-            // Update fields if they exist in the request body
-            if let Some(purpose) = body.purpose {
-                reservation.purpose = Set(purpose);
-            }
-            if let Some(start_time) = body.start_time {
-                reservation.start_time = Set(start_time.parse().unwrap());
-            }
-            if let Some(end_time) = body.end_time {
-                reservation.end_time = Set(end_time.parse().unwrap());
-            }
-
-            match reservation.update(&state.db).await {
-                Ok(updated_reservation) => (StatusCode::OK, Json(updated_reservation)).into_response(),
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to update reservation",
-                )
-                    .into_response(),
-            }
-        }
-        Ok(None) => (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to fetch reservation for update",
-        )
-            .into_response(),
-    }
-}
-
-// ===============================
 //   Review Reservation (Admin)
 // ===============================
 #[derive(Deserialize, ToSchema)]
@@ -185,7 +112,7 @@ pub async fn review_reservation(
 
     match reservation::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(reservation)) => {
-            let mut reservation: reservation::ActiveModel = reservation.into();
+            let mut reservation: reservation::ActiveModel = reservation.into();  // 轉換為 ActiveModel
             reservation.status = Set(status);
             reservation.reject_reason = Set(reject_reason);
 
@@ -194,16 +121,14 @@ pub async fn review_reservation(
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to review reservation",
-                )
-                    .into_response(),
+                ).into_response(),
             }
         }
         Ok(None) => (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to review reservation",
-        )
-            .into_response(),
+        ).into_response(),
     }
 }
 
@@ -213,7 +138,6 @@ pub fn reservation_router() -> Router<AppState> {
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
     Router::new()
-        .route("/", post(create_reservation))
-        .route("/{id}", put(update_reservation))
+        .route("/", post(create_reservation)) 
         .merge(admin_only_route)
 }
