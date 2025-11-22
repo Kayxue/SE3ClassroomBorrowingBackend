@@ -30,6 +30,8 @@ use loginsystem::AuthBackend;
 use routes::classroom::classroom_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
+use routes::key::key_router;
+use routes::reservation::reservation_router;
 
 #[utoipa::path(
     get,
@@ -261,6 +263,7 @@ async fn main() {
         .nest("/user", user_router())
         .nest("/classroom", classroom_router(imgbb_api_key))
         .nest("/reservation", reservation_router())
+        .nest("/key", key_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
