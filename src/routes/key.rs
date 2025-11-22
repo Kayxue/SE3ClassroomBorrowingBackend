@@ -122,6 +122,9 @@ pub async fn delete_key(
     }
 }
 
+use axum::{Router, routing::{put, delete}};
+use crate::{AppState, key::{update_key, delete_key}};
+
 pub fn key_router() -> Router<AppState> {
     Router::new()
         .route("/:id", put(update_key))
