@@ -45,7 +45,6 @@ pub async fn create_key(
     Json(body): Json<CreateKeyBody>,
 ) -> impl IntoResponse {
 
-    // 1️⃣ 檢查教室是否存在
     match classroom::Entity::find_by_id(body.classroom_id.clone())
         .one(&state.db)
         .await
@@ -58,7 +57,6 @@ pub async fn create_key(
         ).into_response(),
     }
 
-    // 2️⃣ 檢查 key_number 是否已存在
     match key::Entity::find()
         .filter(key::Column::KeyNumber.eq(body.key_number.clone()))
         .one(&state.db)
@@ -100,3 +98,4 @@ pub fn key_router() -> Router<AppState> {
         .route("/", post(create_key))
         .route_layer(permission_required!(AuthBackend, Role::Admin))
 }
+
