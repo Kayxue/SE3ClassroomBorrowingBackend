@@ -456,7 +456,7 @@ pub async fn delete_classroom(
         }
     };
 
-    let photo_id = classroom_model.photo_id.clone();
+    let photo_id = &classroom_model.photo_id;
 
     let base_url = IMAGE_SERVICE_IP.get().unwrap().clone();
     let key = IMAGE_SERVICE_API_KEY.get().unwrap().clone();
