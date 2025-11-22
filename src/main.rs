@@ -145,6 +145,9 @@ struct UserApi;
         routes::classroom::create_classroom,
         routes::classroom::get_classroom,
         routes::classroom::list_classrooms,
+        routes::classroom::update_classroom,
+        routes::classroom::update_classroom_photo,
+        routes::classroom::delete_classroom
     ),
     components(schemas(
         routes::classroom::CreateClassroomBody,
@@ -154,6 +157,8 @@ struct UserApi;
         routes::classroom::GetClassroomKeyResponse,
         routes::classroom::GetClassroomReservationResponse,
         routes::classroom::GetClassroomKeyReservationResponse,
+        routes::classroom::UpdateClassroomBody,
+        routes::classroom::UpdateClassroomPhotoBody,
         entities::key::Model,
         entities::reservation::Model,
     ))
@@ -195,6 +200,8 @@ struct ClassroomApi;
             routes::classroom::GetClassroomKeyReservationResponse,
             entities::key::Model,
             entities::reservation::Model,
+            routes::classroom::UpdateClassroomBody,
+            routes::classroom::UpdateClassroomPhotoBody,
         )
     )
 )]
@@ -255,7 +262,8 @@ async fn main() {
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
 
     let image_service_ip = env::var("IMAGE_SERVICE_IP").expect("IMAGE_SERVICE_IP must be set");
-    let image_service_api_key = env::var("IMAGE_SERVICE_API_KEY").expect("IMAGE_SERVICE_API_KEY must be set");
+    let image_service_api_key =
+        env::var("IMAGE_SERVICE_API_KEY").expect("IMAGE_SERVICE_API_KEY must be set");
 
     let app_state = AppState { db: db };
 
@@ -264,7 +272,10 @@ async fn main() {
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2))
         .nest("/user", user_router())
-        .nest("/classroom", classroom_router(image_service_ip,image_service_api_key))
+        .nest(
+            "/classroom",
+            classroom_router(image_service_ip, image_service_api_key),
+        )
         .nest("/reservation", reservation_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))

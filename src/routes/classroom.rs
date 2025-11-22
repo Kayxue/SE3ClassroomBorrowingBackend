@@ -1,10 +1,14 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::entities::{key, reservation};
 use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
+use crate::entities::{key, reservation};
 use crate::{entities::classroom, loginsystem::AuthBackend};
 use axum::extract::Query;
+<<<<<<< HEAD
 use axum::routing::{post, put, delete};
+=======
+use axum::routing::{delete, post, put};
+>>>>>>> 21611a3 (Fix syntax error)
 use axum::{
     Json, Router,
     body::Bytes,
@@ -46,26 +50,42 @@ pub struct CreateClassroomBody {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct GetClassroomQuery{
+pub struct GetClassroomQuery {
     with_keys: Option<bool>,
     with_reservations: Option<bool>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct UpdateClassroomBody {
+    name: String,
+    capacity: i32,
+    location: String,
+    room_code: String,
+    description: String,
+}
+
+#[derive(TryFromMultipart, ToSchema)]
+pub struct UpdateClassroomPhotoBody {
+    #[form_data(limit = "5MB")]
+    #[schema(value_type = String, format = "binary")]
+    photo: FieldData<Bytes>,
+}
+
 #[derive(Serialize, ToSchema)]
-pub struct GetClassroomKeyReservationResponse{
+pub struct GetClassroomKeyReservationResponse {
     classroom: classroom::Model,
     keys: Vec<key::Model>,
     reservations: Vec<reservation::Model>,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct GetClassroomKeyResponse{
+pub struct GetClassroomKeyResponse {
     classroom: classroom::Model,
     keys: Vec<key::Model>,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct GetClassroomReservationResponse{
+pub struct GetClassroomReservationResponse {
     classroom: classroom::Model,
     reservations: Vec<reservation::Model>,
 }
@@ -101,9 +121,18 @@ pub async fn create_classroom(
         photo,
     }): TypedMultipart<CreateClassroomBody>,
 ) -> impl IntoResponse {
-    let url = IMAGE_SERVICE_IP.get().expect("IMAGE_SERVICE_IP not set").clone();
-    let key = IMAGE_SERVICE_API_KEY.get().expect("IMAGE_SERVICE_API_KEY not set").clone();
-    let client = IMAGE_SERVICE_CLIENT.get().expect("IMAGE_SERVICE_CLIENT not set").clone();
+    let url = IMAGE_SERVICE_IP
+        .get()
+        .expect("IMAGE_SERVICE_IP not set")
+        .clone();
+    let key = IMAGE_SERVICE_API_KEY
+        .get()
+        .expect("IMAGE_SERVICE_API_KEY not set")
+        .clone();
+    let client = IMAGE_SERVICE_CLIENT
+        .get()
+        .expect("IMAGE_SERVICE_CLIENT not set")
+        .clone();
 
     let body = multipart::Form::new().part(
         "image",
@@ -117,12 +146,10 @@ pub async fn create_classroom(
         .send()
         .await
     {
-        Ok(resp) => {
-            match resp.status() {
-                StatusCode::CREATED => resp.text().await.unwrap(),
-                _ => {
-                    return (StatusCode::BAD_REQUEST, resp.text().await.unwrap()).into_response();
-                }
+        Ok(resp) => match resp.status() {
+            StatusCode::CREATED => resp.text().await.unwrap(),
+            _ => {
+                return (StatusCode::BAD_REQUEST, resp.text().await.unwrap()).into_response();
             }
         },
         Err(_) => {
@@ -208,7 +235,7 @@ pub async fn get_classroom(
                         .find_related(crate::entities::key::Entity)
                         .all(&state.db)
                         .await;
-                    
+
                     let reservations_result = classroom
                         .find_related(crate::entities::reservation::Entity)
                         .all(&state.db)
@@ -222,10 +249,14 @@ pub async fn get_classroom(
                                 "reservations": reservations,
                             });
                             (StatusCode::OK, Json(response)).into_response()
-                        },
-                        _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch classroom with keys and reservations").into_response(),
+                        }
+                        _ => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to fetch classroom with keys and reservations",
+                        )
+                            .into_response(),
                     }
-                },
+                }
                 (Some(true), _) => {
                     let keys_result = classroom
                         .find_related(crate::entities::key::Entity)
@@ -238,10 +269,14 @@ pub async fn get_classroom(
                                 "keys": keys,
                             });
                             (StatusCode::OK, Json(response)).into_response()
-                        },
-                        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch classroom with keys").into_response(),
+                        }
+                        Err(_) => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to fetch classroom with keys",
+                        )
+                            .into_response(),
                     }
-                },
+                }
                 (_, Some(true)) => {
                     let reservations_result = classroom
                         .find_related(crate::entities::reservation::Entity)
@@ -254,13 +289,17 @@ pub async fn get_classroom(
                                 "reservations": reservations,
                             });
                             (StatusCode::OK, Json(response)).into_response()
-                        },
-                        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch classroom with reservations").into_response(),
+                        }
+                        Err(_) => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to fetch classroom with reservations",
+                        )
+                            .into_response(),
                     }
-                },
+                }
                 _ => (StatusCode::OK, Json(classroom)).into_response(),
             }
-        },
+        }
         Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -274,6 +313,7 @@ pub async fn get_classroom(
 //   UPDATE CLASSROOM
 // =========================
 
+<<<<<<< HEAD
 #[derive(Deserialize, ToSchema)]
 pub struct UpdateClassroomBody {
     name: Option<String>,
@@ -289,6 +329,8 @@ pub struct UpdateClassroomPhotoBody {
     photo: FieldData<Bytes>,
 }
 
+=======
+>>>>>>> 21611a3 (Fix syntax error)
 #[utoipa::path(
     put,
     tags = ["Classroom"],
@@ -310,21 +352,11 @@ pub async fn update_classroom(
         Ok(Some(classroom_model)) => {
             let mut classroom: classroom::ActiveModel = classroom_model.into();
 
-            if let Some(name) = body.name {
-                classroom.name = Set(name);
-            }
-            if let Some(capacity) = body.capacity {
-                classroom.capacity = Set(capacity);
-            }
-            if let Some(location) = body.location {
-                classroom.location = Set(location);
-            }
-            if let Some(room_code) = body.room_code {
-                classroom.room_code = Set(room_code);
-            }
-            if let Some(description) = body.description {
-                classroom.description = Set(description);
-            }
+            classroom.name = Set(body.name);
+            classroom.capacity = Set(body.capacity);
+            classroom.location = Set(body.location);
+            classroom.room_code = Set(body.room_code);
+            classroom.description = Set(body.description);
 
             match classroom.update(&state.db).await {
                 Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
@@ -371,7 +403,7 @@ pub async fn update_classroom_photo(
     Path(id): Path<String>,
     TypedMultipart(UpdateClassroomPhotoBody { photo }): TypedMultipart<UpdateClassroomPhotoBody>,
 ) -> impl IntoResponse {
-    let Some(classroom_model) = classroom::Entity::find_by_id(id.clone())
+    let Some(classroom_model) = classroom::Entity::find_by_id(id)
         .one(&state.db)
         .await
         .unwrap_or(None)
@@ -379,7 +411,7 @@ pub async fn update_classroom_photo(
         return (StatusCode::NOT_FOUND, "Classroom not found").into_response();
     };
 
-    let current_photo_id = classroom_model.photo_id.clone();
+    let current_photo_id = &classroom_model.photo_id;
 
     let base_url = IMAGE_SERVICE_IP.get().unwrap().clone();
     let key = IMAGE_SERVICE_API_KEY.get().unwrap().clone();
@@ -387,8 +419,7 @@ pub async fn update_classroom_photo(
 
     let form = multipart::Form::new().part(
         "image",
-        Part::bytes(photo.contents.to_vec())
-            .file_name(photo.metadata.file_name.unwrap()),
+        Part::bytes(photo.contents.to_vec()).file_name(photo.metadata.file_name.unwrap()),
     );
 
     let url = format!("{}/{}", base_url, current_photo_id);
@@ -410,11 +441,11 @@ pub async fn update_classroom_photo(
         }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to upload new photo"
-        ).into_response(),
+            "Failed to upload new photo",
+        )
+            .into_response(),
     }
 }
-
 
 // =========================
 //   DELETE CLASSROOM
@@ -435,7 +466,7 @@ pub async fn delete_classroom(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let classroom_model = match classroom::Entity::find_by_id(id.clone()).one(&state.db).await {
+    let classroom_model = match classroom::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(c)) => c,
         Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
         Err(_) => {
@@ -443,7 +474,7 @@ pub async fn delete_classroom(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to fetch classroom",
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -465,7 +496,6 @@ pub async fn delete_classroom(
         println!("WARN: Failed to delete classroom image on image server.");
     }
 
-
     match classroom_model.delete(&state.db).await {
         Ok(_) => (StatusCode::OK, "Classroom deleted successfully").into_response(),
         Err(_) => (
@@ -476,12 +506,10 @@ pub async fn delete_classroom(
     }
 }
 
-
-// =========================
-//   ROUTER
-// =========================
-
-pub fn classroom_router(image_service_url:String,image_service_api_key: String) -> Router<AppState> {
+pub fn classroom_router(
+    image_service_url: String,
+    image_service_api_key: String,
+) -> Router<AppState> {
     IMAGE_SERVICE_IP
         .set(image_service_url)
         .expect("IMAGE_SERVICE_IP already set");
