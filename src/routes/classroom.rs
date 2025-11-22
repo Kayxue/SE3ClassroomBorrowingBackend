@@ -4,11 +4,7 @@ use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
 use crate::entities::{key, reservation};
 use crate::{entities::classroom, loginsystem::AuthBackend};
 use axum::extract::Query;
-<<<<<<< HEAD
 use axum::routing::{post, put, delete};
-=======
-use axum::routing::{delete, post, put};
->>>>>>> 21611a3 (Fix syntax error)
 use axum::{
     Json, Router,
     body::Bytes,
@@ -313,24 +309,6 @@ pub async fn get_classroom(
 //   UPDATE CLASSROOM
 // =========================
 
-<<<<<<< HEAD
-#[derive(Deserialize, ToSchema)]
-pub struct UpdateClassroomBody {
-    name: Option<String>,
-    capacity: Option<i32>,
-    location: Option<String>,
-    room_code: Option<String>,
-    description: Option<String>,
-}
-#[derive(TryFromMultipart, ToSchema)]
-pub struct UpdateClassroomPhotoBody {
-    #[form_data(limit = "5MB")]
-    #[schema(value_type = String, format = "binary")]
-    photo: FieldData<Bytes>,
-}
-
-=======
->>>>>>> 21611a3 (Fix syntax error)
 #[utoipa::path(
     put,
     tags = ["Classroom"],
