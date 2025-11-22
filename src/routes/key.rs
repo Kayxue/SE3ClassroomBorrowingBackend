@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::IntoResponse,
     routing::post,
@@ -8,10 +8,10 @@ use axum::{
 use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
-    ActiveModelTrait, EntityTrait, QueryFilter,
+    ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait,
     ActiveValue::{NotSet, Set},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
@@ -21,14 +21,11 @@ use crate::{
     entities::sea_orm_active_enums::Role,
 };
 
-
 #[derive(Deserialize, ToSchema)]
 pub struct CreateKeyBody {
-    pub key_code: String,
+    pub key_number: String,
     pub classroom_id: String,
-    pub note: Option<String>,
 }
-
 
 #[utoipa::path(
     post,
@@ -39,7 +36,7 @@ pub struct CreateKeyBody {
     responses(
         (status = 201, description = "Key created successfully", body = key::Model),
         (status = 404, description = "Classroom not found"),
-        (status = 400, description = "Key already exists"),
+        (status = 400, description = "Key number already exists"),
         (status = 500, description = "Failed to create key")
     )
 )]
@@ -48,49 +45,45 @@ pub async fn create_key(
     Json(body): Json<CreateKeyBody>,
 ) -> impl IntoResponse {
 
-
+    // 1️⃣ 檢查教室是否存在
     match classroom::Entity::find_by_id(body.classroom_id.clone())
         .one(&state.db)
         .await
     {
-        Ok(Some(_)) => {} 
+        Ok(Some(_)) => {}
         Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to query classroom"
-            ).into_response()
-        }
+        Err(_) => return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to query classroom"
+        ).into_response(),
     }
 
+    // 2️⃣ 檢查 key_number 是否已存在
     match key::Entity::find()
-        .filter(key::Column::ClassroomId.eq(body.classroom_id.clone()))
-        .filter(key::Column::KeyCode.eq(body.key_code.clone()))
+        .filter(key::Column::KeyNumber.eq(body.key_number.clone()))
         .one(&state.db)
         .await
     {
         Ok(Some(_)) => {
             return (
                 StatusCode::BAD_REQUEST,
-                "This key already exists for the classroom"
-            ).into_response()
+                "This key_number already exists"
+            ).into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to check key duplication"
-            ).into_response()
+            ).into_response();
         }
         _ => {}
     }
 
     let new_key = key::ActiveModel {
         id: Set(nanoid!()),
-        key_code: Set(body.key_code),
-        classroom_id: Set(body.classroom_id),
-        note: Set(body.note),
-        created_at: NotSet,
-        updated_at: NotSet,
+        key_number: Set(body.key_number),
+        classroom_id: Set(Some(body.classroom_id)),
+        is_active: Set(true),
     };
 
     match new_key.insert(&state.db).await {
@@ -98,12 +91,9 @@ pub async fn create_key(
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to create key"
-        )
-            .into_response(),
+        ).into_response(),
     }
 }
-
-
 
 pub fn key_router() -> Router<AppState> {
     Router::new()
