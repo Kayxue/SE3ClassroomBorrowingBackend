@@ -497,10 +497,6 @@ pub fn classroom_router(image_service_url:String,image_service_api_key: String) 
 
     Router::new()
         .route("/", get(list_classrooms))
-        .route(
-            "/{id}",
-            get(get_classroom), // .put(update_classroom)
-                                // .delete(delete_classroom),
-        )
+        .route("/{id}", get(get_classroom))
         .merge(admin_only_route)
 }
