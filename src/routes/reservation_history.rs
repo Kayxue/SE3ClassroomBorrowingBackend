@@ -1,46 +1,84 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    routing::get,
 };
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
-use serde::Serialize;
+use sea_orm::{EntityTrait, QueryFilter};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-use crate::{
-    AppState,
-    entities::reservation,
-};
+use crate::{AppState, entities::{reservation, classroom}};
 
-#[derive(Serialize)]
-pub struct ClassroomReservationList {
-    pub classroom_id: String,
-    pub reservations: Vec<reservation::Model>,
+#[derive(Serialize, ToSchema)]
+pub struct ReservationHistoryResponse {
+    classroom_name: String,
+    reservation_id: String,
+    purpose: String,
+    start_time: String,
+    end_time: String,
 }
 
-pub async fn list_reservations_by_classroom(
+#[utoipa::path(
+    get,
+    tags = ["Reservation"],
+    description = "Get reservation history of a classroom",
+    path = "/classroom/{id}/history",
+    responses(
+        (status = 200, description = "List of reservations for the classroom", body = Vec<ReservationHistoryResponse>),
+        (status = 404, description = "Classroom not found"),
+        (status = 500, description = "Internal server error"),
+    ),
+    params(
+        ("id" = String, Path, description = "Classroom ID")
+    ),
+    security(
+        ("session_cookie" = [])
+    )
+)]
+pub async fn reservation_history(
     State(state): State<AppState>,
-    Path(classroom_id): Path<String>,
+    Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let db = &state.db;
+    match classroom::Entity::find_by_id(id).one(&state.db).await {
+        Ok(Some(classroom)) => {
+            let reservations = reservation::Entity::find()
+                .filter(reservation::Column::ClassroomId.eq(classroom.id))
+                .all(&state.db)
+                .await;
 
-    let res = reservation::Entity::find()
-        .filter(reservation::Column::ClassroomId.eq(classroom_id.clone()))
-        .all(db)
-        .await;
+            match reservations {
+                Ok(reservations) => {
+                    let response: Vec<ReservationHistoryResponse> = reservations
+                        .into_iter()
+                        .map(|res| ReservationHistoryResponse {
+                            classroom_name: classroom.name,
+                            reservation_id: res.id,
+                            purpose: res.purpose,
+                            start_time: res.start_time.to_string(),
+                            end_time: res.end_time.to_string(),
+                        })
+                        .collect();
 
-    match res {
-        Ok(list) => {
-            let body = ClassroomReservationList {
-                classroom_id,
-                reservations: list,
-            };
-            (StatusCode::OK, Json(body)).into_response()
+                    (StatusCode::OK, Json(response)).into_response()
+                }
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to fetch reservation history",
+                )
+                    .into_response(),
+            }
         }
+        Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to fetch reservation history",
+            "Failed to fetch classroom",
         )
             .into_response(),
     }
+}
+
+pub fn reservation_history_router() -> Router<AppState> {
+    Router::new().route("/classroom/:id/history", get(reservation_history))
 }
