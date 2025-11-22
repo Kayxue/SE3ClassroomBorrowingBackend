@@ -100,6 +100,21 @@ impl utoipa::Modify for SecurityAddon {
 #[derive(OpenApi)]
 #[openapi(
     tags(
+        (name = "Key", description = "Key endpoints")
+    ),
+    paths(
+        routes::key::create_key,
+    ),
+    components(schemas(
+        entities::key::Model,
+        routes::key::CreateKeyBody,
+    ))
+)]
+struct KeyApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
         (name = "Reservation", description = "Reservation endpoints")
     ),
     paths(
@@ -168,7 +183,7 @@ struct ClassroomApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi)),
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi)),
     tags((name = "Root", description = "Root endpoints")),
     paths(
         root,
@@ -203,6 +218,7 @@ struct ClassroomApi;
             entities::reservation::Model,
             routes::classroom::UpdateClassroomBody,
             routes::classroom::UpdateClassroomPhotoBody,
+            routes::key::CreateKeyBody
         )
     )
 )]

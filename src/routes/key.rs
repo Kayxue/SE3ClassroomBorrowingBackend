@@ -9,7 +9,7 @@ use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait,
-    ActiveValue::{NotSet, Set},
+    ActiveValue::Set,
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -45,7 +45,7 @@ pub async fn create_key(
     Json(body): Json<CreateKeyBody>,
 ) -> impl IntoResponse {
 
-    match classroom::Entity::find_by_id(body.classroom_id.clone())
+    match classroom::Entity::find_by_id(&body.classroom_id)
         .one(&state.db)
         .await
     {
@@ -58,7 +58,7 @@ pub async fn create_key(
     }
 
     match key::Entity::find()
-        .filter(key::Column::KeyNumber.eq(body.key_number.clone()))
+        .filter(key::Column::KeyNumber.eq(&body.key_number))
         .one(&state.db)
         .await
     {
