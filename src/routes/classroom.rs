@@ -272,6 +272,210 @@ pub async fn get_classroom(
     }
 }
 
+// =========================
+//   UPDATE CLASSROOM
+// =========================
+
+#[derive(Deserialize, ToSchema)]
+pub struct UpdateClassroomBody {
+    name: Option<String>,
+    capacity: Option<i32>,
+    location: Option<String>,
+    room_code: Option<String>,
+    description: Option<String>,
+}
+
+#[utoipa::path(
+    put,
+    tags = ["Classroom"],
+    description = "Update classroom",
+    path = "/{id}",
+    request_body(content = UpdateClassroomBody, content_type = "application/json"),
+    responses(
+        (status = 200, description = "Classroom updated successfully", body = classroom::Model),
+        (status = 404, description = "Classroom not found"),
+        (status = 500, description = "Failed to update classroom")
+    )
+)]
+pub async fn update_classroom(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateClassroomBody>,
+) -> impl IntoResponse {
+    match classroom::Entity::find_by_id(id).one(&state.db).await {
+        Ok(Some(classroom_model)) => {
+            let mut classroom: classroom::ActiveModel = classroom_model.into();
+
+            if let Some(name) = body.name {
+                classroom.name = Set(name);
+            }
+            if let Some(capacity) = body.capacity {
+                classroom.capacity = Set(capacity);
+            }
+            if let Some(location) = body.location {
+                classroom.location = Set(location);
+            }
+            if let Some(room_code) = body.room_code {
+                classroom.room_code = Set(room_code);
+            }
+            if let Some(description) = body.description {
+                classroom.description = Set(description);
+            }
+
+            match classroom.update(&state.db).await {
+                Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to update classroom",
+                )
+                    .into_response(),
+            }
+        }
+        Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update classroom",
+        )
+            .into_response(),
+    }
+}
+
+// =========================
+//   UPDATE CLASSROOM PHOTO
+// =========================
+
+#[utoipa::path(
+    put,
+    tags = ["Classroom"],
+    description = "Update classroom photo",
+    path = "/{id}/photo",
+    request_body(
+        content = UpdateClassroomPhotoBody,
+        content_type = "multipart/form-data"
+    ),
+    params(
+        ("id" = String, Path, description = "Classroom ID")
+    ),
+    responses(
+        (status = 200, description = "Photo updated successfully", body = classroom::Model),
+        (status = 404, description = "Classroom not found"),
+        (status = 500, description = "Failed to update classroom photo")
+    )
+)]
+pub async fn update_classroom_photo(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    TypedMultipart(UpdateClassroomPhotoBody { photo }): TypedMultipart<UpdateClassroomPhotoBody>,
+) -> impl IntoResponse {
+    let Some(classroom_model) = classroom::Entity::find_by_id(id.clone())
+        .one(&state.db)
+        .await
+        .unwrap_or(None)
+    else {
+        return (StatusCode::NOT_FOUND, "Classroom not found").into_response();
+    };
+
+    let current_photo_id = classroom_model.photo_id.clone();
+
+    let base_url = IMAGE_SERVICE_IP.get().unwrap().clone();
+    let key = IMAGE_SERVICE_API_KEY.get().unwrap().clone();
+    let client = IMAGE_SERVICE_CLIENT.get().unwrap().clone();
+
+    let form = multipart::Form::new().part(
+        "image",
+        Part::bytes(photo.contents.to_vec())
+            .file_name(photo.metadata.file_name.unwrap()),
+    );
+
+    let url = format!("{}/{}", base_url, current_photo_id);
+
+    let upload_result = client
+        .put(url)
+        .multipart(form)
+        .header("key", key)
+        .send()
+        .await;
+
+    match upload_result {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                (StatusCode::OK, Json(classroom_model)).into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, resp.text().await.unwrap()).into_response()
+            }
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to upload new photo"
+        ).into_response(),
+    }
+}
+
+
+// =========================
+//   DELETE CLASSROOM
+// =========================
+
+#[utoipa::path(
+    delete,
+    tags = ["Classroom"],
+    description = "Delete classroom",
+    path = "/{id}",
+    responses(
+        (status = 200, description = "Classroom deleted successfully"),
+        (status = 404, description = "Classroom not found"),
+        (status = 500, description = "Failed to delete classroom")
+    )
+)]
+pub async fn delete_classroom(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let Some(classroom_model) =
+        match classroom::Entity::find_by_id(id.clone()).one(&state.db).await {
+            Ok(Some(c)) => c,
+            Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to fetch classroom",
+                )
+                    .into_response()
+            }
+        }
+    else {
+        return (StatusCode::NOT_FOUND, "Classroom not found").into_response();
+    };
+
+    let photo_id = classroom_model.photo_id.clone();
+
+    let base_url = IMAGE_SERVICE_IP.get().unwrap().clone();
+    let key = IMAGE_SERVICE_API_KEY.get().unwrap().clone();
+    let client = IMAGE_SERVICE_CLIENT.get().unwrap().clone();
+
+    let image_delete_url = format!("{}/{}", base_url, photo_id);
+
+    let delete_image_result = client
+        .delete(image_delete_url)
+        .header("key", key)
+        .send()
+        .await;
+
+    if delete_image_result.is_err() {
+        println!("WARN: Failed to delete classroom image on image server.");
+    }
+
+
+    match classroom_model.delete(&state.db).await {
+        Ok(_) => (StatusCode::OK, "Classroom deleted successfully").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to delete classroom",
+        )
+            .into_response(),
+    }
+}
+
 pub fn classroom_router(image_service_url:String,image_service_api_key: String) -> Router<AppState> {
     IMAGE_SERVICE_IP
         .set(image_service_url)
@@ -286,6 +490,9 @@ pub fn classroom_router(image_service_url:String,image_service_api_key: String) 
 
     let admin_only_route = Router::new()
         .route("/", post(create_classroom))
+        .route("/{id}", put(update_classroom))
+        .route("/{id}/photo", put(update_classroom_photo))
+        .route("/{id}", delete(delete_classroom))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
     Router::new()
