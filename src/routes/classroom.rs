@@ -4,7 +4,7 @@ use crate::entities::{key, reservation};
 use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
 use crate::{entities::classroom, loginsystem::AuthBackend};
 use axum::extract::Query;
-use axum::routing::post;
+use axum::routing::{post, put, delete};
 use axum::{
     Json, Router,
     body::Bytes,
@@ -177,17 +177,17 @@ pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse
 #[utoipa::path(
     get,
     tags = ["Classroom"],
-    description = "Get classroom by ID with optional related data. Use query parameters to include keys and/or reservations.",
+    description = "Get classroom by ID with optional related data.",
     path = "/{id}",
     params(
         ("id" = String, Path, description = "Classroom ID"),
-        ("with_keys" = Option<bool>, Query, description = "Include related keys in response"),
-        ("with_reservations" = Option<bool>, Query, description = "Include related reservations in response")
+        ("with_keys" = Option<bool>, Query),
+        ("with_reservations" = Option<bool>, Query)
     ),
     responses(
-        (status = 200, description = "Classroom found. Response format varies based on query parameters: \n- No params: Returns classroom object only\n- with_keys=true: Returns ClassroomWithKeys\n- with_reservations=true: Returns ClassroomWithReservations\n- Both params=true: Returns ClassroomWithKeysAndReservations", body = GetClassroomResponse),
-        (status = 404, description = "Classroom not found", body = String),
-        (status = 500, description = "Internal server error", body = String),
+        (status = 200, body = GetClassroomResponse),
+        (status = 404, description = "Classroom not found"),
+        (status = 500, description = "Internal server error"),
     )
 )]
 pub async fn get_classroom(
@@ -202,9 +202,8 @@ pub async fn get_classroom(
 
     match classroom::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(classroom)) => {
-            match (with_keys,with_reservations) {
+            match (with_keys, with_reservations) {
                 (Some(true), Some(true)) => {
-                    // Fetch keys and reservations separately
                     let keys_result = classroom
                         .find_related(crate::entities::key::Entity)
                         .all(&state.db)
@@ -214,10 +213,9 @@ pub async fn get_classroom(
                         .find_related(crate::entities::reservation::Entity)
                         .all(&state.db)
                         .await;
-                    
+
                     match (keys_result, reservations_result) {
                         (Ok(keys), Ok(reservations)) => {
-                            // Combine the results
                             let response = serde_json::json!({
                                 "classroom": classroom,
                                 "keys": keys,
@@ -283,6 +281,12 @@ pub struct UpdateClassroomBody {
     location: Option<String>,
     room_code: Option<String>,
     description: Option<String>,
+}
+#[derive(TryFromMultipart, ToSchema)]
+pub struct UpdateClassroomPhotoBody {
+    #[form_data(limit = "5MB")]
+    #[schema(value_type = String, format = "binary")]
+    photo: FieldData<Bytes>,
 }
 
 #[utoipa::path(
@@ -431,20 +435,16 @@ pub async fn delete_classroom(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(classroom_model) =
-        match classroom::Entity::find_by_id(id.clone()).one(&state.db).await {
-            Ok(Some(c)) => c,
-            Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to fetch classroom",
-                )
-                    .into_response()
-            }
+    let classroom_model = match classroom::Entity::find_by_id(id.clone()).one(&state.db).await {
+        Ok(Some(c)) => c,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch classroom",
+            )
+                .into_response()
         }
-    else {
-        return (StatusCode::NOT_FOUND, "Classroom not found").into_response();
     };
 
     let photo_id = classroom_model.photo_id.clone();
@@ -475,6 +475,11 @@ pub async fn delete_classroom(
             .into_response(),
     }
 }
+
+
+// =========================
+//   ROUTER
+// =========================
 
 pub fn classroom_router(image_service_url:String,image_service_api_key: String) -> Router<AppState> {
     IMAGE_SERVICE_IP
