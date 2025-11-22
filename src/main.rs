@@ -1,3 +1,7 @@
+#[cfg(all(target_env = "musl", not(target_os = "macos")))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
@@ -31,7 +35,6 @@ use routes::classroom::classroom_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
 use routes::key::key_router;
-use routes::reservation::reservation_router;
 
 #[utoipa::path(
     get,
@@ -97,6 +100,21 @@ impl utoipa::Modify for SecurityAddon {
 #[derive(OpenApi)]
 #[openapi(
     tags(
+        (name = "Key", description = "Key endpoints")
+    ),
+    paths(
+        routes::key::create_key,
+    ),
+    components(schemas(
+        entities::key::Model,
+        routes::key::CreateKeyBody,
+    ))
+)]
+struct KeyApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
         (name = "Reservation", description = "Reservation endpoints")
     ),
     paths(
@@ -143,6 +161,9 @@ struct UserApi;
         routes::classroom::create_classroom,
         routes::classroom::get_classroom,
         routes::classroom::list_classrooms,
+        routes::classroom::update_classroom,
+        routes::classroom::update_classroom_photo,
+        routes::classroom::delete_classroom
     ),
     components(schemas(
         routes::classroom::CreateClassroomBody,
@@ -152,6 +173,8 @@ struct UserApi;
         routes::classroom::GetClassroomKeyResponse,
         routes::classroom::GetClassroomReservationResponse,
         routes::classroom::GetClassroomKeyReservationResponse,
+        routes::classroom::UpdateClassroomBody,
+        routes::classroom::UpdateClassroomPhotoBody,
         entities::key::Model,
         entities::reservation::Model,
     ))
@@ -160,7 +183,7 @@ struct ClassroomApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi)),
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi)),
     tags((name = "Root", description = "Root endpoints")),
     paths(
         root,
@@ -193,6 +216,9 @@ struct ClassroomApi;
             routes::classroom::GetClassroomKeyReservationResponse,
             entities::key::Model,
             entities::reservation::Model,
+            routes::classroom::UpdateClassroomBody,
+            routes::classroom::UpdateClassroomPhotoBody,
+            routes::key::CreateKeyBody
         )
     )
 )]
@@ -252,7 +278,9 @@ async fn main() {
     let auth_backend = AuthBackend::new(db.clone());
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
 
-    let imgbb_api_key = env::var("IMGBB_API_KEY").expect("IMGBB_API_KEY must be set");
+    let image_service_ip = env::var("IMAGE_SERVICE_IP").expect("IMAGE_SERVICE_IP must be set");
+    let image_service_api_key =
+        env::var("IMAGE_SERVICE_API_KEY").expect("IMAGE_SERVICE_API_KEY must be set");
 
     let app_state = AppState { db: db };
 
@@ -261,7 +289,10 @@ async fn main() {
         .route("/nanoid", get(nanoid))
         .route("/argon2/{password}", get(argon2))
         .nest("/user", user_router())
-        .nest("/classroom", classroom_router(imgbb_api_key))
+        .nest(
+            "/classroom",
+            classroom_router(image_service_ip, image_service_api_key),
+        )
         .nest("/reservation", reservation_router())
         .nest("/key", key_router())
         .with_state(app_state)
