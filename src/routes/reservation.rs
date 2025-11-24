@@ -23,7 +23,7 @@ use crate::{
 };
 
 use nanoid::nanoid;
-
+use chrono::{DateTime, Local};
 // ===============================
 //   Create Reservation (User)
 // ===============================
@@ -58,13 +58,31 @@ pub async fn create_reservation(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
 
+    let start_time = DateTime::parse_from_rfc3339(&body.start_time)
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "Invalid start_time format. Expected: YYYY-MM-DDTHH:MM:SS",
+            )
+        })?
+        .with_timezone(&Local);
+
+    let end_time = DateTime::parse_from_rfc3339(&body.end_time)
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "Invalid end_time format. Expected: YYYY-MM-DDTHH:MM:SS",
+            )
+        })?
+        .with_timezone(&Local);
+
     let new_reservation = reservation::ActiveModel {
         id: Set(nanoid!()),
         user_id: Set(Some(user.id)),
         classroom_id: Set(Some(body.classroom_id)),
         purpose: Set(body.purpose),
-        start_time: Set(body.start_time.parse().unwrap()),
-        end_time: Set(body.end_time.parse().unwrap()),
+        start_time: Set(start_time),
+        end_time: Set(end_time),
         approved_by: Set(None),
         reject_reason: Set(None),
         cancel_reason: Set(None),
