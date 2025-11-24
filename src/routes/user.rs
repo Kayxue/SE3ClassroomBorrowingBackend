@@ -53,6 +53,18 @@ pub struct UserResponse {
     pub name: String,
 }
 
+// ===============================
+//   Update Profile Struct
+// ===============================
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct UpdateProfileBody {
+    pub username: Option<String>,
+    pub email: Option<String>,
+    pub phone_number: Option<String>,
+    pub name: Option<String>,
+}
+
 impl From<user::Model> for UserResponse {
     fn from(user: user::Model) -> Self {
         Self {
@@ -255,6 +267,61 @@ pub async fn update_password(
     }
 }
 
+// ===============================
+//   Update Profile
+// ===============================
+
+#[utoipa::path(
+    put,
+    tags = ["User"],
+    description = "Update user profile info",
+    path = "/update-profile",
+    request_body(
+        content = UpdateProfileBody,
+        description = "User profile update data",
+        content_type = "application/json"
+    ),
+    responses(
+        (status = 200, description = "Profile updated successfully", body = UserResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error", body = String),
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn update_profile(
+    session: AuthSession,
+    State(state): State<AppState>,
+    Json(body): Json<UpdateProfileBody>,
+) -> impl IntoResponse {
+    let user_current = match session.user {
+        Some(u) => u,
+        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    };
+
+    let mut active: user::ActiveModel = user_current.clone().into();
+
+    if let Some(username) = body.username {
+        active.username = Set(username);
+    }
+    if let Some(email) = body.email {
+        active.email = Set(email);
+    }
+    if let Some(phone) = body.phone_number {
+        active.phone_number = Set(phone);
+    }
+    if let Some(name) = body.name {
+        active.name = Set(name);
+    }
+
+    match active.update(&state.db).await {
+        Ok(updated) => (StatusCode::OK, Json(UserResponse::from(updated))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update profile",
+        )
+            .into_response(),
+    }
+}
 pub fn user_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
@@ -268,5 +335,9 @@ pub fn user_router() -> Router<AppState> {
         .route(
             "/update-password",
             put(update_password).route_layer(login_required!(AuthBackend)),
+        )
+        .route(
+            "/update-profile",
+            put(update_profile).route_layer(login_required!(AuthBackend)),
         )
 }
