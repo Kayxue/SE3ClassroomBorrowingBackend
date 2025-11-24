@@ -58,23 +58,27 @@ pub async fn create_reservation(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
 
-    let start_time = DateTime::parse_from_rfc3339(&body.start_time)
-        .map_err(|_| {
-            (
+    let start_time = match DateTime::parse_from_rfc3339(&body.start_time) {
+        Ok(t) => t.with_timezone(&Local),
+        Err(_) => {
+            return (
                 StatusCode::BAD_REQUEST,
                 "Invalid start_time format. Expected: YYYY-MM-DDTHH:MM:SS",
             )
-        })?
-        .with_timezone(&Local);
+                .into_response();
+        }
+    };
 
-    let end_time = DateTime::parse_from_rfc3339(&body.end_time)
-        .map_err(|_| {
-            (
+    let end_time = match DateTime::parse_from_rfc3339(&body.end_time) {
+        Ok(t) => t.with_timezone(&Local),
+        Err(_) => {
+            return (
                 StatusCode::BAD_REQUEST,
                 "Invalid end_time format. Expected: YYYY-MM-DDTHH:MM:SS",
             )
-        })?
-        .with_timezone(&Local);
+                .into_response();
+        }
+    };
 
     let new_reservation = reservation::ActiveModel {
         id: Set(nanoid!()),
@@ -91,9 +95,14 @@ pub async fn create_reservation(
 
     match new_reservation.insert(&state.db).await {
         Ok(model) => (StatusCode::CREATED, Json(model)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create reservation").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create reservation",
+        )
+            .into_response(),
     }
 }
+
 
 // ===============================
 //   Review Reservation (Admin)
