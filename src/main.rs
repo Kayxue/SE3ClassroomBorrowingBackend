@@ -109,6 +109,7 @@ impl utoipa::Modify for SecurityAddon {
     ),
     components(schemas(
         entities::key::Model,
+        entities::key::Relation,
         routes::key::CreateKeyBody,
         routes::key::UpdateKeyBody,
         routes::key::KeyResponse,
