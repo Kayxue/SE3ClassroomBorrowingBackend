@@ -26,12 +26,15 @@ use nanoid::nanoid;
 // ===============================
 //   Create Reservation (User)
 // ===============================
+// ===============================
+//   Create Reservation (User)
+// ===============================
 #[derive(Deserialize, ToSchema)]
 pub struct CreateReservationBody {
     pub classroom_id: String,
     pub purpose: String,
-    pub start_time: String,   // ← 字串
-    pub end_time: String,     // ← 字串
+    pub start_time: String,
+    pub end_time: String,
 }
 
 #[utoipa::path(
@@ -62,8 +65,8 @@ pub async fn create_reservation(
         user_id: Set(Some(user.id)),
         classroom_id: Set(Some(body.classroom_id)),
         purpose: Set(body.purpose),
-        start_time: Set(body.start_time),   // ← 字串
-        end_time: Set(body.end_time),       // ← 字串
+        start_time: Set(body.start_time.parse().unwrap()),
+        end_time: Set(body.end_time.parse().unwrap()),
         approved_by: Set(None),
         reject_reason: Set(None),
         cancel_reason: Set(None),
@@ -72,14 +75,9 @@ pub async fn create_reservation(
 
     match new_reservation.insert(&state.db).await {
         Ok(model) => (StatusCode::CREATED, Json(model)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to create reservation",
-        )
-            .into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create reservation").into_response(),
     }
 }
-
 
 // ===============================
 //   Review Reservation (Admin)
