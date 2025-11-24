@@ -105,14 +105,11 @@ impl utoipa::Modify for SecurityAddon {
     paths(
         routes::key::create_key,
         routes::key::update_key,
-        routes::key::delete_key,
     ),
     components(schemas(
         entities::key::Model,
-        entities::key::Relation,
         routes::key::CreateKeyBody,
         routes::key::UpdateKeyBody,
-        routes::key::KeyResponse,
     ))
 )]
 struct KeyApi;
