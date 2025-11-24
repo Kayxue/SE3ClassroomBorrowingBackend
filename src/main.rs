@@ -35,7 +35,6 @@ use routes::classroom::classroom_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
 use routes::key::key_router;
-use routes::reservation_history::reservation_history_router;
 
 #[utoipa::path(
     get,
@@ -296,7 +295,6 @@ async fn main() {
         )
         .nest("/reservation", reservation_router())
         .nest("/key", key_router())
-        .nest("/reservation-history", reservation_history_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
