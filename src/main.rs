@@ -119,11 +119,13 @@ struct KeyApi;
     ),
     paths(
         routes::reservation::review_reservation,
+        routes::reservation::create_reservation,
     ),
     components(schemas(
         entities::reservation::Model,
         entities::sea_orm_active_enums::ReservationStatus,
         routes::reservation::ReviewReservationBody,
+        routes::reservation::CreateReservationBody,
     ))
 )]
 struct ReservationApi;
