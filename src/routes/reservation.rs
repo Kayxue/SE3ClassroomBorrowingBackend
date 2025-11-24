@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     routing::{post, put},
 };
-use axum_login::{permission_required, login_required};
+use axum_login::permission_required;
 use sea_orm::{
     ActiveModelTrait, EntityTrait,
     ActiveValue::Set
