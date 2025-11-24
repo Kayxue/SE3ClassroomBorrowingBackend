@@ -140,6 +140,7 @@ struct ReservationApi;
         routes::user::profile,
         routes::user::get_user,
         routes::user::update_password,
+        routes::user::update_profile
     ),
     components(schemas(
         entities::user::Model,
@@ -148,6 +149,7 @@ struct ReservationApi;
         routes::user::RegisterBody,
         routes::user::UpdatePasswordBody,
         routes::user::UserResponse,
+        routes::user::UpdateProfileBody
     ))
 )]
 struct UserApi;
