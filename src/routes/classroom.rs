@@ -38,7 +38,6 @@ pub struct CreateClassroomBody {
     name: String,
     capacity: i32,
     location: String,
-    room_code: String,
     description: String,
     #[form_data(limit = "5MB")]
     #[schema(value_type = String, format = "binary")]
@@ -56,7 +55,6 @@ pub struct UpdateClassroomBody {
     name: String,
     capacity: i32,
     location: String,
-    room_code: String,
     description: String,
 }
 
@@ -112,7 +110,6 @@ pub async fn create_classroom(
         name,
         capacity,
         location,
-        room_code,
         description,
         photo,
     }): TypedMultipart<CreateClassroomBody>,
@@ -161,7 +158,6 @@ pub async fn create_classroom(
         status: Set(ClassroomStatus::Available),
         created_at: NotSet,
         updated_at: NotSet,
-        room_code: Set(room_code),
         description: Set(description),
         photo_id: Set(response),
     };
@@ -333,7 +329,6 @@ pub async fn update_classroom(
             classroom.name = Set(body.name);
             classroom.capacity = Set(body.capacity);
             classroom.location = Set(body.location);
-            classroom.room_code = Set(body.room_code);
             classroom.description = Set(body.description);
 
             match classroom.update(&state.db).await {
