@@ -293,28 +293,28 @@ pub async fn update_profile(
     State(state): State<AppState>,
     Json(body): Json<UpdateProfileBody>,
 ) -> impl IntoResponse {
-    let user_current = match session.user {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
+    let user_current = session.user.unwrap();
 
-    let mut active: user::ActiveModel = user_current.clone().into();
+    let mut new_user: user::ActiveModel = user_current.into();
 
     if let Some(username) = body.username {
-        active.username = Set(username);
+        new_user.username = Set(username);
     }
     if let Some(email) = body.email {
-        active.email = Set(email);
+        new_user.email = Set(email);
     }
-    if let Some(phone) = body.phone_number {
-        active.phone_number = Set(phone);
+    if let Some(phone_number) = body.phone_number {
+        new_user.phone_number = Set(phone_number);
     }
     if let Some(name) = body.name {
-        active.name = Set(name);
+        new_user.name = Set(name);
     }
 
-    match active.update(&state.db).await {
-        Ok(updated) => (StatusCode::OK, Json(UserResponse::from(updated))).into_response(),
+    match new_user.update(&state.db).await {
+        Ok(updated_user) => {
+            let user_response = UserResponse::from(updated_user);
+            (StatusCode::OK, Json(user_response)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update profile",
@@ -322,6 +322,7 @@ pub async fn update_profile(
             .into_response(),
     }
 }
+
 pub fn user_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
