@@ -23,7 +23,6 @@ use crate::{
 };
 
 use nanoid::nanoid;
-use chrono::{DateTime, Local};
 // ===============================
 //   Create Reservation (User)
 // ===============================
@@ -31,8 +30,8 @@ use chrono::{DateTime, Local};
 pub struct CreateReservationBody {
     pub classroom_id: String,
     pub purpose: String,
-    pub start_time: String,
-    pub end_time: String,
+    pub start_time: String,   // ← 字串
+    pub end_time: String,     // ← 字串
 }
 
 #[utoipa::path(
@@ -58,35 +57,13 @@ pub async fn create_reservation(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
 
-    let start_time = match DateTime::parse_from_rfc3339(&body.start_time) {
-        Ok(t) => t.with_timezone(&Local),
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Invalid start_time format. Expected: YYYY-MM-DDTHH:MM:SS",
-            )
-                .into_response();
-        }
-    };
-
-    let end_time = match DateTime::parse_from_rfc3339(&body.end_time) {
-        Ok(t) => t.with_timezone(&Local),
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Invalid end_time format. Expected: YYYY-MM-DDTHH:MM:SS",
-            )
-                .into_response();
-        }
-    };
-
     let new_reservation = reservation::ActiveModel {
         id: Set(nanoid!()),
         user_id: Set(Some(user.id)),
         classroom_id: Set(Some(body.classroom_id)),
         purpose: Set(body.purpose),
-        start_time: Set(start_time),
-        end_time: Set(end_time),
+        start_time: Set(body.start_time),   // ← 字串
+        end_time: Set(body.end_time),       // ← 字串
         approved_by: Set(None),
         reject_reason: Set(None),
         cancel_reason: Set(None),
