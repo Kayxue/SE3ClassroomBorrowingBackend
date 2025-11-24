@@ -1,14 +1,14 @@
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
-    routing::post,
+    routing::{post, put, delete},
 };
 use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
-    ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait,
+    ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ModelTrait,
     ActiveValue::Set,
 };
 use serde::Deserialize;
@@ -25,6 +25,13 @@ use crate::{
 pub struct CreateKeyBody {
     pub key_number: String,
     pub classroom_id: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct UpdateKeyBody {
+    pub key_number: String,
+    pub classroom_id: String,
+    pub is_active: bool,
 }
 
 #[utoipa::path(
@@ -93,9 +100,127 @@ pub async fn create_key(
     }
 }
 
+#[utoipa::path(
+    put,
+    tags = ["Key"],
+    description = "Update an existing key",
+    path = "/{id}",
+    request_body(content = UpdateKeyBody, content_type = "application/json"),
+    params(
+        ("id" = String, Path, description = "Key ID")
+    ),
+    responses(
+        (status = 200, description = "Key updated successfully", body = key::Model),
+        (status = 404, description = "Key or classroom not found"),
+        (status = 400, description = "Key number already exists"),
+        (status = 500, description = "Failed to update key")
+    )
+)]
+pub async fn update_key(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateKeyBody>,
+) -> impl IntoResponse {
+    let key_model = match key::Entity::find_by_id(&id).one(&state.db).await {
+        Ok(Some(k)) => k,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch key"
+            ).into_response();
+        }
+    };
+
+    match classroom::Entity::find_by_id(&body.classroom_id)
+        .one(&state.db)
+        .await
+    {
+        Ok(Some(_)) => {}
+        Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
+        Err(_) => return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to query classroom"
+        ).into_response(),
+    }
+
+    match key::Entity::find()
+        .filter(key::Column::KeyNumber.eq(&body.key_number))
+        .filter(key::Column::Id.ne(id.clone()))
+        .one(&state.db)
+        .await
+    {
+        Ok(Some(_)) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "This key_number already exists"
+            ).into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to check key duplication"
+            ).into_response();
+        }
+        _ => {}
+    }
+
+    let mut key_active: key::ActiveModel = key_model.into();
+    key_active.key_number = Set(body.key_number);
+    key_active.classroom_id = Set(Some(body.classroom_id));
+    key_active.is_active = Set(body.is_active);
+
+    match key_active.update(&state.db).await {
+        Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update key"
+        ).into_response(),
+    }
+}
+
+#[utoipa::path(
+    delete,
+    tags = ["Key"],
+    description = "Delete a key",
+    path = "/{id}",
+    params(
+        ("id" = String, Path, description = "Key ID")
+    ),
+    responses(
+        (status = 200, description = "Key deleted successfully"),
+        (status = 404, description = "Key not found"),
+        (status = 500, description = "Failed to delete key")
+    )
+)]
+pub async fn delete_key(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let key_model = match key::Entity::find_by_id(&id).one(&state.db).await {
+        Ok(Some(k)) => k,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch key"
+            ).into_response();
+        }
+    };
+
+    match key_model.delete(&state.db).await {
+        Ok(_) => (StatusCode::OK, "Key deleted successfully").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to delete key"
+        ).into_response(),
+    }
+}
+
 pub fn key_router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_key))
+        .route("/{id}", put(update_key))
+        .route("/{id}", delete(delete_key))
         .route_layer(permission_required!(AuthBackend, Role::Admin))
 }
-
