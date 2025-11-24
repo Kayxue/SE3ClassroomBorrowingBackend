@@ -8,7 +8,7 @@ use axum::{
 use axum_login::permission_required;
 use sea_orm::{
     ActiveModelTrait, EntityTrait,
-    ActiveValue::Set
+    ActiveValue::Set,
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -23,9 +23,7 @@ use crate::{
 };
 
 use nanoid::nanoid;
-// ===============================
-//   Create Reservation (User)
-// ===============================
+
 // ===============================
 //   Create Reservation (User)
 // ===============================
@@ -75,7 +73,11 @@ pub async fn create_reservation(
 
     match new_reservation.insert(&state.db).await {
         Ok(model) => (StatusCode::CREATED, Json(model)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create reservation").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create reservation",
+        )
+            .into_response(),
     }
 }
 
@@ -84,15 +86,15 @@ pub async fn create_reservation(
 // ===============================
 #[derive(Deserialize, ToSchema)]
 pub struct ReviewReservationBody {
-    status: ReservationStatus,
-    reject_reason: Option<String>,
+    pub status: ReservationStatus,
+    pub reject_reason: Option<String>,
 }
 
 #[utoipa::path(
     put,
     tags = ["Reservation"],
-    description = "Review a reservation",
-    path = "/{id}",
+    description = "Review a reservation (Admin only)",
+    path = "/{id}/review",
     request_body(content = ReviewReservationBody, content_type = "application/json"),
     responses(
         (status = 200, body = String),
@@ -113,8 +115,8 @@ pub async fn review_reservation(
     } = body;
 
     match reservation::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(reservation)) => {
-            let mut reservation: reservation::ActiveModel = reservation.into();  // 轉換為 ActiveModel
+        Ok(Some(res_model)) => {
+            let mut reservation: reservation::ActiveModel = res_model.into();
             reservation.status = Set(status);
             reservation.reject_reason = Set(reject_reason);
 
@@ -123,23 +125,127 @@ pub async fn review_reservation(
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to review reservation",
-                ).into_response(),
+                )
+                    .into_response(),
             }
         }
         Ok(None) => (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to review reservation",
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
+// ===============================
+//   Update Reservation (User)
+// ===============================
+#[derive(Deserialize, ToSchema)]
+pub struct UpdateReservationBody {
+    pub purpose: Option<String>,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+}
+
+#[utoipa::path(
+    put,
+    tags = ["Reservation"],
+    description = "Update own reservation request (only when pending)",
+    path = "/{id}",
+    request_body(content = UpdateReservationBody, content_type = "application/json"),
+    responses(
+        (status = 200, description = "Reservation updated", body = reservation::Model),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Reservation not found"),
+        (status = 400, description = "Only pending reservations can be updated"),
+        (status = 500, description = "Failed to update reservation")
+    ),
+    params(("id" = String, Path)),
+    security(("session_cookie" = []))
+)]
+pub async fn update_reservation(
+    session: AuthSession,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateReservationBody>,
+) -> impl IntoResponse {
+    let user = match session.user {
+        Some(u) => u,
+        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    };
+
+    let UpdateReservationBody {
+        purpose,
+        start_time,
+        end_time,
+    } = body;
+
+    let res_model = match reservation::Entity::find_by_id(&id).one(&state.db).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch reservation",
+            )
+                .into_response();
+        }
+    };
+
+    if res_model.user_id != Some(user.id.clone()) {
+        return (
+            StatusCode::FORBIDDEN,
+            "You can only update your own reservation",
+        )
+            .into_response();
+    }
+
+    if res_model.status != ReservationStatus::Pending {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Only pending reservations can be updated",
+        )
+            .into_response();
+    }
+
+    let mut reservation: reservation::ActiveModel = res_model.into();
+
+    if let Some(p) = purpose {
+        reservation.purpose = Set(p);
+    }
+    if let Some(start) = start_time {
+        reservation.start_time = Set(start.parse().unwrap());
+    }
+    if let Some(end) = end_time {
+        reservation.end_time = Set(end.parse().unwrap());
+    }
+
+    match reservation.update(&state.db).await {
+        Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update reservation",
+        )
+            .into_response(),
+    }
+}
+
+// ===============================
+//   Reservation Router
+// ===============================
 pub fn reservation_router() -> Router<AppState> {
+
     let admin_only_route = Router::new()
-        .route("/{id}", put(review_reservation))
+        .route("/{id}/review", put(review_reservation))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
+    let user_reservation_route = Router::new()
+        .route("/", post(create_reservation))
+        .route("/{id}", put(update_reservation));
+
     Router::new()
-        .route("/", post(create_reservation)) 
+        .merge(user_reservation_route)
         .merge(admin_only_route)
 }
