@@ -11,7 +11,7 @@ use sea_orm::{
     ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ModelTrait,
     ActiveValue::Set,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
@@ -34,6 +34,25 @@ pub struct UpdateKeyBody {
     pub is_active: bool,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct KeyResponse {
+    pub id: String,
+    pub key_number: String,
+    pub classroom_id: Option<String>,
+    pub is_active: bool,
+}
+
+impl From<key::Model> for KeyResponse {
+    fn from(model: key::Model) -> Self {
+        Self {
+            id: model.id,
+            key_number: model.key_number,
+            classroom_id: model.classroom_id,
+            is_active: model.is_active,
+        }
+    }
+}
+
 #[utoipa::path(
     post,
     tags = ["Key"],
@@ -41,7 +60,7 @@ pub struct UpdateKeyBody {
     path = "",
     request_body(content = CreateKeyBody, content_type = "application/json"),
     responses(
-        (status = 201, description = "Key created successfully", body = key::Model),
+        (status = 201, description = "Key created successfully", body = KeyResponse),
         (status = 404, description = "Classroom not found"),
         (status = 400, description = "Key number already exists"),
         (status = 500, description = "Failed to create key")
@@ -92,7 +111,10 @@ pub async fn create_key(
     };
 
     match new_key.insert(&state.db).await {
-        Ok(model) => (StatusCode::CREATED, Json(model)).into_response(),
+        Ok(model) => {
+            let resp = KeyResponse::from(model);
+            (StatusCode::CREATED, Json(resp)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to create key"
@@ -110,7 +132,7 @@ pub async fn create_key(
         ("id" = String, Path, description = "Key ID")
     ),
     responses(
-        (status = 200, description = "Key updated successfully", body = key::Model),
+        (status = 200, description = "Key updated successfully", body = KeyResponse),
         (status = 404, description = "Key or classroom not found"),
         (status = 400, description = "Key number already exists"),
         (status = 500, description = "Failed to update key")
@@ -121,6 +143,7 @@ pub async fn update_key(
     Path(id): Path<String>,
     Json(body): Json<UpdateKeyBody>,
 ) -> impl IntoResponse {
+
     let key_model = match key::Entity::find_by_id(&id).one(&state.db).await {
         Ok(Some(k)) => k,
         Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
@@ -171,7 +194,10 @@ pub async fn update_key(
     key_active.is_active = Set(body.is_active);
 
     match key_active.update(&state.db).await {
-        Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
+        Ok(updated) => {
+            let resp = KeyResponse::from(updated);
+            (StatusCode::OK, Json(resp)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update key"
