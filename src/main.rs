@@ -125,12 +125,14 @@ struct KeyApi;
     paths(
         routes::reservation::review_reservation,
         routes::reservation::create_reservation,
+        routes::reservation::update_reservation,
     ),
     components(schemas(
         entities::reservation::Model,
         entities::sea_orm_active_enums::ReservationStatus,
         routes::reservation::ReviewReservationBody,
         routes::reservation::CreateReservationBody,
+        routes::reservation::UpdateReservationBody,
     ))
 )]
 struct ReservationApi;
