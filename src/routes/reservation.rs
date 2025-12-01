@@ -6,10 +6,7 @@ use axum::{
     routing::{post, put},
 };
 use axum_login::permission_required;
-use sea_orm::{
-    ActiveModelTrait, EntityTrait,
-    ActiveValue::Set,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -236,7 +233,6 @@ pub async fn update_reservation(
 //   Reservation Router
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
-
     let admin_only_route = Router::new()
         .route("/{id}/review", put(review_reservation))
         .route_layer(permission_required!(AuthBackend, Role::Admin));

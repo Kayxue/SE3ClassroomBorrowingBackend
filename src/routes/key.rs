@@ -1,24 +1,23 @@
 use axum::{
     Json, Router,
-    extract::{State, Path},
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{post, put, delete},
+    routing::{delete, post, put},
 };
 use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
-    ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ModelTrait,
-    ActiveValue::Set,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
     AppState,
-    loginsystem::AuthBackend,
-    entities::{key, classroom},
     entities::sea_orm_active_enums::Role,
+    entities::{classroom, key},
+    loginsystem::AuthBackend,
 };
 
 #[derive(Deserialize, ToSchema)]
@@ -70,17 +69,19 @@ pub async fn create_key(
     State(state): State<AppState>,
     Json(body): Json<CreateKeyBody>,
 ) -> impl IntoResponse {
-
     match classroom::Entity::find_by_id(&body.classroom_id)
         .one(&state.db)
         .await
     {
         Ok(Some(_)) => {}
         Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
-        Err(_) => return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to query classroom"
-        ).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to query classroom",
+            )
+                .into_response();
+        }
     }
 
     match key::Entity::find()
@@ -89,16 +90,14 @@ pub async fn create_key(
         .await
     {
         Ok(Some(_)) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "This key_number already exists"
-            ).into_response();
+            return (StatusCode::BAD_REQUEST, "This key_number already exists").into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to check key duplication"
-            ).into_response();
+                "Failed to check key duplication",
+            )
+                .into_response();
         }
         _ => {}
     }
@@ -115,10 +114,7 @@ pub async fn create_key(
             let resp = KeyResponse::from(model);
             (StatusCode::CREATED, Json(resp)).into_response()
         }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to create key"
-        ).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create key").into_response(),
     }
 }
 
@@ -143,15 +139,11 @@ pub async fn update_key(
     Path(id): Path<String>,
     Json(body): Json<UpdateKeyBody>,
 ) -> impl IntoResponse {
-
     let key_model = match key::Entity::find_by_id(&id).one(&state.db).await {
         Ok(Some(k)) => k,
         Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
         Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to fetch key"
-            ).into_response();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch key").into_response();
         }
     };
 
@@ -161,10 +153,13 @@ pub async fn update_key(
     {
         Ok(Some(_)) => {}
         Ok(None) => return (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
-        Err(_) => return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to query classroom"
-        ).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to query classroom",
+            )
+                .into_response();
+        }
     }
 
     match key::Entity::find()
@@ -174,16 +169,14 @@ pub async fn update_key(
         .await
     {
         Ok(Some(_)) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "This key_number already exists"
-            ).into_response();
+            return (StatusCode::BAD_REQUEST, "This key_number already exists").into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to check key duplication"
-            ).into_response();
+                "Failed to check key duplication",
+            )
+                .into_response();
         }
         _ => {}
     }
@@ -198,10 +191,7 @@ pub async fn update_key(
             let resp = KeyResponse::from(updated);
             (StatusCode::OK, Json(resp)).into_response()
         }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to update key"
-        ).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update key").into_response(),
     }
 }
 
@@ -227,19 +217,13 @@ pub async fn delete_key(
         Ok(Some(k)) => k,
         Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
         Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to fetch key"
-            ).into_response();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch key").into_response();
         }
     };
 
     match key_model.delete(&state.db).await {
         Ok(_) => (StatusCode::OK, "Key deleted successfully").into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to delete key"
-        ).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete key").into_response(),
     }
 }
 

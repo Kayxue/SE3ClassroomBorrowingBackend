@@ -4,7 +4,7 @@ use crate::entities::sea_orm_active_enums::{ClassroomStatus, Role};
 use crate::entities::{key, reservation};
 use crate::{entities::classroom, loginsystem::AuthBackend};
 use axum::extract::Query;
-use axum::routing::{post, put, delete};
+use axum::routing::{delete, post, put};
 use axum::{
     Json, Router,
     body::Bytes,
@@ -220,78 +220,76 @@ pub async fn get_classroom(
     } = query;
 
     match classroom::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(classroom)) => {
-            match (with_keys, with_reservations) {
-                (Some(true), Some(true)) => {
-                    let keys_result = classroom
-                        .find_related(crate::entities::key::Entity)
-                        .all(&state.db)
-                        .await;
+        Ok(Some(classroom)) => match (with_keys, with_reservations) {
+            (Some(true), Some(true)) => {
+                let keys_result = classroom
+                    .find_related(crate::entities::key::Entity)
+                    .all(&state.db)
+                    .await;
 
-                    let reservations_result = classroom
-                        .find_related(crate::entities::reservation::Entity)
-                        .all(&state.db)
-                        .await;
+                let reservations_result = classroom
+                    .find_related(crate::entities::reservation::Entity)
+                    .all(&state.db)
+                    .await;
 
-                    match (keys_result, reservations_result) {
-                        (Ok(keys), Ok(reservations)) => {
-                            let response = serde_json::json!({
-                                "classroom": classroom,
-                                "keys": keys,
-                                "reservations": reservations,
-                            });
-                            (StatusCode::OK, Json(response)).into_response()
-                        }
-                        _ => (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to fetch classroom with keys and reservations",
-                        )
-                            .into_response(),
+                match (keys_result, reservations_result) {
+                    (Ok(keys), Ok(reservations)) => {
+                        let response = serde_json::json!({
+                            "classroom": classroom,
+                            "keys": keys,
+                            "reservations": reservations,
+                        });
+                        (StatusCode::OK, Json(response)).into_response()
                     }
+                    _ => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to fetch classroom with keys and reservations",
+                    )
+                        .into_response(),
                 }
-                (Some(true), _) => {
-                    let keys_result = classroom
-                        .find_related(crate::entities::key::Entity)
-                        .all(&state.db)
-                        .await;
-                    match keys_result {
-                        Ok(keys) => {
-                            let response = serde_json::json!({
-                                "classroom": classroom,
-                                "keys": keys,
-                            });
-                            (StatusCode::OK, Json(response)).into_response()
-                        }
-                        Err(_) => (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to fetch classroom with keys",
-                        )
-                            .into_response(),
-                    }
-                }
-                (_, Some(true)) => {
-                    let reservations_result = classroom
-                        .find_related(crate::entities::reservation::Entity)
-                        .all(&state.db)
-                        .await;
-                    match reservations_result {
-                        Ok(reservations) => {
-                            let response = serde_json::json!({
-                                "classroom": classroom,
-                                "reservations": reservations,
-                            });
-                            (StatusCode::OK, Json(response)).into_response()
-                        }
-                        Err(_) => (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to fetch classroom with reservations",
-                        )
-                            .into_response(),
-                    }
-                }
-                _ => (StatusCode::OK, Json(classroom)).into_response(),
             }
-        }
+            (Some(true), _) => {
+                let keys_result = classroom
+                    .find_related(crate::entities::key::Entity)
+                    .all(&state.db)
+                    .await;
+                match keys_result {
+                    Ok(keys) => {
+                        let response = serde_json::json!({
+                            "classroom": classroom,
+                            "keys": keys,
+                        });
+                        (StatusCode::OK, Json(response)).into_response()
+                    }
+                    Err(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to fetch classroom with keys",
+                    )
+                        .into_response(),
+                }
+            }
+            (_, Some(true)) => {
+                let reservations_result = classroom
+                    .find_related(crate::entities::reservation::Entity)
+                    .all(&state.db)
+                    .await;
+                match reservations_result {
+                    Ok(reservations) => {
+                        let response = serde_json::json!({
+                            "classroom": classroom,
+                            "reservations": reservations,
+                        });
+                        (StatusCode::OK, Json(response)).into_response()
+                    }
+                    Err(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to fetch classroom with reservations",
+                    )
+                        .into_response(),
+                }
+            }
+            _ => (StatusCode::OK, Json(classroom)).into_response(),
+        },
         Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,

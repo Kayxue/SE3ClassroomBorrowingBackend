@@ -32,9 +32,9 @@ mod routes;
 use argonhasher::hash;
 use loginsystem::AuthBackend;
 use routes::classroom::classroom_router;
+use routes::key::key_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
-use routes::key::key_router;
 
 #[utoipa::path(
     get,

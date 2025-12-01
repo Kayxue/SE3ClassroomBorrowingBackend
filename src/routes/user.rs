@@ -9,7 +9,8 @@ use axum_login::login_required;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
-    EntityTrait, prelude::DateTimeWithTimeZone,
+    EntityTrait,
+    prelude::DateTimeWithTimeZone,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
