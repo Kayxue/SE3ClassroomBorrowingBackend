@@ -228,12 +228,42 @@ pub async fn update_reservation(
             .into_response(),
     }
 }
-
+// ===============================
+//   Get Pending Reservations (Admin)
+// ===============================
+#[utoipa::path(
+    get,
+    tags = ["Reservation"],
+    description = "Get all pending reservation requests (Admin only)",
+    path = "/pending",
+    responses(
+        (status = 200, description = "List of pending reservations", body = [reservation::Model]),
+        (status = 500, description = "Failed to fetch pending reservations")
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn get_pending_reservations(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    match reservation::Entity::find()
+        .filter(reservation::Column::Status.eq(ReservationStatus::Pending))
+        .all(&state.db)
+        .await
+    {
+        Ok(list) => (StatusCode::OK, Json(list)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch pending reservations",
+        )
+            .into_response(),
+    }
+}
 // ===============================
 //   Reservation Router
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
+        .route("/pending", get(get_pending_reservations))
         .route("/{id}/review", put(review_reservation))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
