@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{post, put},
+    routing::{get, post, put},
 };
 use axum_login::permission_required;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
