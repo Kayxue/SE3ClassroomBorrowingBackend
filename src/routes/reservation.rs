@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post, put},
 };
 use axum_login::permission_required;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, ColumnTrait, QueryFilter};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
