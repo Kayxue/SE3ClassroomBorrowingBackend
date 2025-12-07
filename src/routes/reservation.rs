@@ -229,7 +229,7 @@ pub async fn update_reservation(
     }
 }
 // ===============================
-//   Get Pending Reservations (Admin)
+//   Get Pending Reservations
 // ===============================
 #[utoipa::path(
     get,
@@ -263,13 +263,13 @@ pub async fn get_pending_reservations(
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
-        .route("/pending", get(get_pending_reservations))
         .route("/{id}/review", put(review_reservation))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
     let user_reservation_route = Router::new()
         .route("/", post(create_reservation))
         .route("/{id}", put(update_reservation));
+        .route("/pending", get(get_pending_reservations))
 
     Router::new()
         .merge(user_reservation_route)
