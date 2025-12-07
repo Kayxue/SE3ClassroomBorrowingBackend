@@ -268,8 +268,8 @@ pub fn reservation_router() -> Router<AppState> {
 
     let user_reservation_route = Router::new()
         .route("/", post(create_reservation))
-        .route("/{id}", put(update_reservation));
-        .route("/pending", get(get_pending_reservations))
+        .route("/{id}", put(update_reservation))
+        .route("/pending", get(get_pending_reservations));
 
     Router::new()
         .merge(user_reservation_route)
