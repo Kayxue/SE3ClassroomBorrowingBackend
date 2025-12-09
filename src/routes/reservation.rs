@@ -6,17 +6,20 @@ use axum::{
     routing::{get, post, put},
 };
 use axum_login::permission_required;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, ColumnTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
+use string_builder::Builder;
 use utoipa::ToSchema;
 
 use crate::{
     AppState,
+    email_client::send_email,
     entities::{
         reservation,
         sea_orm_active_enums::{ReservationStatus, Role},
+        user,
     },
-    loginsystem::{AuthBackend, AuthSession},
+    login_system::{AuthBackend, AuthSession},
 };
 
 use nanoid::nanoid;
@@ -69,7 +72,43 @@ pub async fn create_reservation(
     };
 
     match new_reservation.insert(&state.db).await {
-        Ok(model) => (StatusCode::CREATED, Json(model)).into_response(),
+        Ok(model) => {
+            let _ = send_email(
+                &user.email,
+                "Reservation Created",
+                format!(
+                    "Your reservation has been created. Reservation ID: {}",
+                    model.id
+                )
+                .as_str(),
+            )
+            .await
+            .unwrap();
+            match user::Entity::find()
+                .filter(user::Column::Role.eq(Role::Admin))
+                .all(&state.db)
+                .await
+            {
+                Ok(admins) => {
+                    for admin in admins {
+                        let _ = send_email(
+                            &admin.email,
+                            format!("New Reservation Request: {}", model.id).as_str(),
+                            format!(
+                                "There is a new reservation request. Reservation ID: {}",
+                                model.id
+                            )
+                            .as_str(),
+                        );
+                    }
+                }
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch admins")
+                        .into_response();
+                }
+            }
+            (StatusCode::CREATED, Json(model)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to create reservation",
@@ -118,7 +157,47 @@ pub async fn review_reservation(
             reservation.reject_reason = Set(reject_reason);
 
             match reservation.update(&state.db).await {
-                Ok(_) => (StatusCode::OK, "Reservation reviewed successfully").into_response(),
+                Ok(reservation_updated) => {
+                    let user = match user::Entity::find_by_id(
+                        reservation_updated.user_id.as_ref().unwrap(),
+                    )
+                    .one(&state.db)
+                    .await
+                    {
+                        Ok(Some(u)) => u,
+                        Ok(None) => {
+                            return (StatusCode::NOT_FOUND, "User not found").into_response();
+                        }
+                        Err(_) => {
+                            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user")
+                                .into_response();
+                        }
+                    };
+
+                    let mut body_builder = Builder::default();
+                    body_builder.append("Your reservation has been reviewed.\nStatus: ");
+                    body_builder.append(format!("{:?}", reservation_updated.status));
+                    if reservation_updated.status == ReservationStatus::Rejected {
+                        if let Some(ref reason) = reservation_updated.reject_reason {
+                            body_builder.append("\nReason: ");
+                            body_builder.append(reason.as_str());
+                        }
+                    }
+                    let email_body = body_builder.string().unwrap();
+
+                    send_email(
+                        &user.email,
+                        format!(
+                            "Reservation has been reviewed: {:?}",
+                            reservation_updated.id
+                        )
+                        .as_str(),
+                        &email_body,
+                    )
+                    .await
+                    .unwrap();
+                    (StatusCode::OK, "Reservation reviewed successfully").into_response()
+                }
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to review reservation",
@@ -229,47 +308,72 @@ pub async fn update_reservation(
     }
 }
 // ===============================
-//   Get Pending Reservations
+//   Get Reservations by Status
 // ===============================
 #[utoipa::path(
     get,
     tags = ["Reservation"],
-    description = "Get all pending reservation requests (Admin only)",
-    path = "/pending",
+    description = "Get all reservations with a specific status (Admin only)",
+    path = "/status/{status}",
     responses(
-        (status = 200, description = "List of pending reservations", body = [reservation::Model]),
-        (status = 500, description = "Failed to fetch pending reservations")
+        (status = 200, description = "List of reservations with the specified status", body = [reservation::Model]),
+        (status = 500, description = "Failed to fetch reservations")
     ),
+    params(("status" = ReservationStatus, Path)),
     security(("session_cookie" = []))
 )]
-pub async fn get_pending_reservations(
+pub async fn get_reservations_by_status(
     State(state): State<AppState>,
+    Path(status): Path<ReservationStatus>,
 ) -> impl IntoResponse {
     match reservation::Entity::find()
-        .filter(reservation::Column::Status.eq(ReservationStatus::Pending))
+        .filter(reservation::Column::Status.eq(status))
         .all(&state.db)
         .await
     {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to fetch pending reservations",
+            "Failed to fetch reservations",
         )
             .into_response(),
     }
 }
+
+// ===============================
+//   Get All Reservations
+// ===============================
+#[utoipa::path(
+    get,
+    tags = ["Reservation"],
+    description = "Get all reservations (Admin only)",
+    path = "/all",
+    responses(
+        (status = 200, description = "List of all reservations", body = [reservation::Model]),
+        (status = 500, description = "Failed to fetch reservations")
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn get_all_reservations(State(state): State<AppState>) -> impl IntoResponse {
+    match reservation::Entity::find().all(&state.db).await {
+        Ok(list) => (StatusCode::OK, Json(list)).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
+    }
+}
+
 // ===============================
 //   Reservation Router
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
         .route("/{id}/review", put(review_reservation))
+        .route("/status/{status}", get(get_reservations_by_status))
+        .route("/all", get(get_all_reservations))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
     let user_reservation_route = Router::new()
         .route("/", post(create_reservation))
-        .route("/{id}", put(update_reservation))
-        .route("/pending", get(get_pending_reservations));
+        .route("/{id}", put(update_reservation));
 
     Router::new()
         .merge(user_reservation_route)

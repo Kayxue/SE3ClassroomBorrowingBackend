@@ -24,17 +24,20 @@ use utoipa::OpenApi;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa_scalar::{Scalar, Servable};
 
-mod argonhasher;
+mod argon_hasher;
+mod email_client;
 mod entities;
-mod loginsystem;
+mod login_system;
 mod routes;
 
-use argonhasher::hash;
-use loginsystem::AuthBackend;
+use argon_hasher::hash;
+use login_system::AuthBackend;
 use routes::classroom::classroom_router;
 use routes::key::key_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
+
+use crate::email_client::{EmailClientConfig, set_email_client_config};
 
 #[utoipa::path(
     get,
@@ -126,7 +129,8 @@ struct KeyApi;
         routes::reservation::review_reservation,
         routes::reservation::create_reservation,
         routes::reservation::update_reservation,
-        routes::reservation::get_pending_reservations,
+        routes::reservation::get_reservations_by_status,
+        routes::reservation::get_all_reservations,
     ),
     components(schemas(
         entities::reservation::Model,
@@ -155,7 +159,7 @@ struct ReservationApi;
     components(schemas(
         entities::user::Model,
         entities::sea_orm_active_enums::Role,
-        loginsystem::Credentials,
+        login_system::Credentials,
         routes::user::RegisterBody,
         routes::user::UpdatePasswordBody,
         routes::user::UserResponse,
@@ -212,7 +216,7 @@ struct ClassroomApi;
         schemas(
             entities::user::Model,
             entities::sea_orm_active_enums::Role,
-            loginsystem::Credentials,
+            login_system::Credentials,
             routes::user::RegisterBody,
             routes::classroom::CreateClassroomBody,
             entities::classroom::Model,
@@ -251,14 +255,26 @@ async fn main() {
     let password_hashing_secret =
         env::var("PASSWORD_HASHING_SECRET").expect("PASSWORD_HASHING_SECRET must be set");
 
-    let argon2_config = argonhasher::Config {
+    let argon2_config = argon_hasher::Argon2Config {
         iterations: 4,
         parallelism: 4,
         memory_cost: 512,
         secret_key: password_hashing_secret.into_bytes(),
     };
 
-    argonhasher::set_config(argon2_config);
+    argon_hasher::set_config(argon2_config);
+
+    let email_client_config = EmailClientConfig {
+        smtp_server: env::var("SMTP_SERVER").expect("SMTP_SERVER must be set"),
+        smtp_port: env::var("SMTP_PORT")
+            .expect("SMTP_PORT must be set")
+            .parse()
+            .unwrap(),
+        username: env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set"),
+        password: env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set"),
+    };
+
+    set_email_client_config(email_client_config);
 
     let redis_pool_config = Config {
         server: ServerConfig::Centralized {

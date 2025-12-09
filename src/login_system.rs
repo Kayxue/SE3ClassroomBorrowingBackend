@@ -1,5 +1,5 @@
 use crate::{
-    argonhasher::verify,
+    argon_hasher::verify,
     entities::{self, prelude::*, sea_orm_active_enums::Role, *},
 };
 use axum_login::{AuthUser, AuthnBackend, AuthzBackend, UserId};

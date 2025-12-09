@@ -17,7 +17,7 @@ use crate::{
     AppState,
     entities::sea_orm_active_enums::Role,
     entities::{classroom, key},
-    loginsystem::AuthBackend,
+    login_system::AuthBackend,
 };
 
 #[derive(Deserialize, ToSchema)]

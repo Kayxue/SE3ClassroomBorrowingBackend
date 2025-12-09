@@ -17,9 +17,9 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState,
-    argonhasher::{hash, verify},
+    argon_hasher::{hash, verify},
     entities::{sea_orm_active_enums::Role, user},
-    loginsystem::{AuthBackend, AuthSession, Credentials},
+    login_system::{AuthBackend, AuthSession, Credentials},
 };
 
 use nanoid::nanoid;

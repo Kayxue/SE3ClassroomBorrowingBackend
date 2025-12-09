@@ -8,14 +8,14 @@ use tokio::task;
 
 static GLOBAL_ARGON2: OnceLock<Arc<Argon2<'static>>> = OnceLock::new();
 
-pub struct Config {
+pub struct Argon2Config {
     pub secret_key: Vec<u8>,
     pub iterations: u32,
     pub parallelism: u32,
     pub memory_cost: u32,
 }
 
-pub fn set_config(config: Config) {
+pub fn set_config(config: Argon2Config) {
     let secret_bytes = Box::leak(config.secret_key.into_boxed_slice());
 
     let argon2 = Argon2::new_with_secret(
