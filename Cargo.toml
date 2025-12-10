@@ -24,13 +24,15 @@ dotenv = "0.15.0"
 utoipa-scalar = { version = "0.3", features = ["axum"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 axum_typed_multipart = "0.16.4"
-reqwest = { version = "0.12.24", features = ["multipart", "json"] }
+reqwest = { version = "0.12.24", default-features = false, features = ["multipart", "json", "rustls-tls"] }
 serde_json = "1.0.145"
 mail-send = "0.5.2"
 string-builder = "0.2.0"
 
 [dependencies.redis]
 version = "*"
+default-features = false
+features = ["tokio-rustls-comp", "tokio-comp"]
 
 [target.'cfg(all(target_env = "musl", not(target_os = "macos")))'.dependencies]
 mimalloc = { version = "0.1", default-features = false }
