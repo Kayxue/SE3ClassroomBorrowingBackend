@@ -357,7 +357,11 @@ pub async fn get_reservations_by_status(
 pub async fn get_all_reservations(State(state): State<AppState>) -> impl IntoResponse {
     match reservation::Entity::find().all(&state.db).await {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch reservations",
+        )
+            .into_response(),
     }
 }
 
