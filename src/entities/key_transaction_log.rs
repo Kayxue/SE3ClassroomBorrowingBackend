@@ -20,6 +20,8 @@ pub struct Model {
     pub on_time: bool,
     #[schema(value_type = String)]
     pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = String)]
+    pub deadline: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

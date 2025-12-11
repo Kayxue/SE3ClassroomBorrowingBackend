@@ -36,6 +36,7 @@ use routes::classroom::classroom_router;
 use routes::key::key_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
+use routes::announcement::announcement_router;
 
 use crate::email_client::{EmailClientConfig, set_email_client_config};
 
@@ -99,6 +100,24 @@ impl utoipa::Modify for SecurityAddon {
         }
     }
 }
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
+        (name = "Announcement", description = "Announcement endpoints")
+    ),
+    paths(
+        routes::announcement::create_announcement,
+        routes::announcement::list_announcements,
+        routes::announcement::get_announcement,
+        routes::announcement::delete_announcement,
+    ),
+    components(schemas(
+        entities::announcement::Model,
+        routes::announcement::CreateAnnouncementBody,
+    ))
+)]
+struct AnnouncementApi;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -199,7 +218,7 @@ struct ClassroomApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi)),
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi), (path = "/announcement", api = AnnouncementApi)),
     tags((name = "Root", description = "Root endpoints")),
     paths(
         root,
@@ -234,7 +253,9 @@ struct ClassroomApi;
             entities::reservation::Model,
             routes::classroom::UpdateClassroomBody,
             routes::classroom::UpdateClassroomPhotoBody,
-            routes::key::CreateKeyBody
+            routes::key::CreateKeyBody,
+            routes::announcement::CreateAnnouncementBody,
+            entities::announcement::Model,
         )
     )
 )]
@@ -323,6 +344,7 @@ async fn main() {
         )
         .nest("/reservation", reservation_router())
         .nest("/key", key_router())
+        .nest("/announcement", announcement_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
