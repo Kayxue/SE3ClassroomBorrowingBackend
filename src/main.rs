@@ -128,6 +128,8 @@ struct AnnouncementApi;
         routes::key::create_key,
         routes::key::update_key,
         routes::key::delete_key,
+        routes::key::borrow_key,
+        routes::key::return_key
     ),
     components(schemas(
         entities::key::Model,
@@ -135,6 +137,8 @@ struct AnnouncementApi;
         routes::key::CreateKeyBody,
         routes::key::UpdateKeyBody,
         routes::key::KeyResponse,
+        routes::key::BorrowKeyBody,
+        routes::key::ReturnKeyBody
     ))
 )]
 struct KeyApi;
@@ -256,6 +260,8 @@ struct ClassroomApi;
             routes::key::CreateKeyBody,
             routes::announcement::CreateAnnouncementBody,
             entities::announcement::Model,
+            routes::key::BorrowKeyBody,
+            routes::key::ReturnKeyBody
         )
     )
 )]
