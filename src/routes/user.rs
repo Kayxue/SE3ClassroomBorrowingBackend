@@ -325,21 +325,16 @@ pub async fn update_profile(
 }
 
 pub fn user_router() -> Router<AppState> {
+    let login_required_router = Router::new()
+        .route("/profile", get(profile))
+        .route("/update-password", put(update_password))
+        .route("/update-profile", put(update_profile))
+        .route_layer(login_required!(AuthBackend));
+
     Router::new()
         .route("/login", post(login))
         .route("/logout", get(logout))
-        .route(
-            "/profile",
-            get(profile).route_layer(login_required!(AuthBackend)),
-        )
         .route("/register", post(register))
         .route("/{id}", get(get_user))
-        .route(
-            "/update-password",
-            put(update_password).route_layer(login_required!(AuthBackend)),
-        )
-        .route(
-            "/update-profile",
-            put(update_profile).route_layer(login_required!(AuthBackend)),
-        )
+        .merge(login_required_router)
 }

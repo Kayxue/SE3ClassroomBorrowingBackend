@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post, put},
 };
-use axum_login::permission_required;
+use axum_login::{login_required, permission_required};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use string_builder::Builder;
@@ -371,15 +371,19 @@ pub async fn get_all_reservations(State(state): State<AppState>) -> impl IntoRes
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
         .route("/{id}/review", put(review_reservation))
-        .route("/status/{status}", get(get_reservations_by_status))
-        .route("/all", get(get_all_reservations))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
-    let user_reservation_route = Router::new()
+    let login_required_route = Router::new()
         .route("/", post(create_reservation))
-        .route("/{id}", put(update_reservation));
+        .route("/{id}", put(update_reservation))
+        .route_layer(login_required!(AuthBackend));
+
+    let general_reservation_route = Router::new()
+        .route("/status/{status}", get(get_reservations_by_status))
+        .route("/all", get(get_all_reservations));
 
     Router::new()
-        .merge(user_reservation_route)
         .merge(admin_only_route)
+        .merge(login_required_route)
+        .merge(general_reservation_route)
 }
