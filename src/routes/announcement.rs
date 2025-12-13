@@ -139,7 +139,11 @@ pub async fn delete_announcement(
     };
     match announcement.delete(&state.db).await {
         Ok(_) => (StatusCode::OK, "Announcement deleted successfully").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete announcement").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to delete announcement",
+        )
+            .into_response(),
     }
 }
 

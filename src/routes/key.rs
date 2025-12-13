@@ -8,7 +8,9 @@ use axum::{
 use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::{NotSet, Set}, ColumnTrait, EntityTrait, ModelTrait, QueryFilter,
+    ActiveModelTrait,
+    ActiveValue::{NotSet, Set},
+    ColumnTrait, EntityTrait, ModelTrait, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -265,17 +267,28 @@ pub async fn borrow_key(
     let key_model = match key::Entity::find_by_id(&id).one(&state.db).await {
         Ok(Some(k)) => k,
         Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch key").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch key").into_response();
+        }
     };
 
     if !key_model.is_active {
         return (StatusCode::BAD_REQUEST, "Key is not active").into_response();
     }
 
-    let reservation_model = match reservation::Entity::find_by_id(&body.reservation_id).one(&state.db).await {
+    let reservation_model = match reservation::Entity::find_by_id(&body.reservation_id)
+        .one(&state.db)
+        .await
+    {
         Ok(Some(r)) => r,
         Ok(None) => return (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservation").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch reservation",
+            )
+                .into_response();
+        }
     };
 
     let new_key_transaction_log = key_transaction_log::ActiveModel {
@@ -288,7 +301,7 @@ pub async fn borrow_key(
         deadline: Set(body.deadline.parse().unwrap()),
         returned_at: NotSet,
         on_time: NotSet,
-        created_at: NotSet
+        created_at: NotSet,
     };
 
     match new_key_transaction_log.insert(&state.db).await {
@@ -318,10 +331,21 @@ pub async fn return_key(
     Path(id): Path<String>,
     Json(body): Json<ReturnKeyBody>,
 ) -> impl IntoResponse {
-    let key_transaction_log_model = match key_transaction_log::Entity::find_by_id(&id).one(&state.db).await {
+    let key_transaction_log_model = match key_transaction_log::Entity::find_by_id(&id)
+        .one(&state.db)
+        .await
+    {
         Ok(Some(k)) => k,
-        Ok(None) => return (StatusCode::NOT_FOUND, "Key transaction log not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch key transaction log").into_response(),
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, "Key transaction log not found").into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch key transaction log",
+            )
+                .into_response();
+        }
     };
 
     if key_transaction_log_model.returned_at.is_some() {
@@ -330,10 +354,13 @@ pub async fn return_key(
 
     let deadline = key_transaction_log_model.deadline;
     let returned_at_parsed = body.returned_at.parse().unwrap();
-    
-    let mut key_transaction_log_active: key_transaction_log::ActiveModel = key_transaction_log_model.into();
+
+    let mut key_transaction_log_active: key_transaction_log::ActiveModel =
+        key_transaction_log_model.into();
     key_transaction_log_active.returned_at = Set(Some(returned_at_parsed));
-    key_transaction_log_active.on_time = Set(body.on_time.unwrap_or_else(|| returned_at_parsed <= deadline));
+    key_transaction_log_active.on_time = Set(body
+        .on_time
+        .unwrap_or_else(|| returned_at_parsed <= deadline));
 
     match key_transaction_log_active.update(&state.db).await {
         Ok(_) => (StatusCode::OK, "Key returned successfully").into_response(),
