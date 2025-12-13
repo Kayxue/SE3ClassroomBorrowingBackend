@@ -16,16 +16,20 @@ pub fn set_email_client_config(config: EmailClientConfig) {
     let _ = GLOBAL_EMAIL_CONFIG.set(config);
 }
 
-pub async fn send_email(to: &str, subject: &str, body: &str) -> Result<(), mail_send::Error> {
+pub async fn send_email(
+    to: impl AsRef<str>,
+    subject: impl AsRef<str>,
+    body: impl AsRef<str>,
+) -> Result<(), mail_send::Error> {
     let config = GLOBAL_EMAIL_CONFIG
         .get()
         .expect("Email client config not set");
 
     let message = MessageBuilder::new()
         .from(config.username.as_ref())
-        .to(to)
-        .subject(subject)
-        .text_body(body);
+        .to(to.as_ref())
+        .subject(subject.as_ref())
+        .text_body(body.as_ref());
 
     SmtpClientBuilder::new(config.smtp_server.as_ref(), config.smtp_port)
         .implicit_tls(false)

@@ -74,13 +74,12 @@ pub async fn create_reservation(
     match new_reservation.insert(&state.db).await {
         Ok(model) => {
             let _ = send_email(
-                &user.email,
+                user.email,
                 "Reservation Created",
                 format!(
                     "Your reservation has been created. Reservation ID: {}",
                     model.id
-                )
-                .as_str(),
+                ),
             )
             .await
             .unwrap();
@@ -92,13 +91,12 @@ pub async fn create_reservation(
                 Ok(admins) => {
                     for admin in admins {
                         let _ = send_email(
-                            &admin.email,
-                            format!("New Reservation Request: {}", model.id).as_str(),
+                            admin.email,
+                            format!("New Reservation Request: {}", model.id),
                             format!(
                                 "There is a new reservation request. Reservation ID: {}",
                                 model.id
-                            )
-                            .as_str(),
+                            ),
                         );
                     }
                 }
@@ -186,13 +184,12 @@ pub async fn review_reservation(
                     let email_body = body_builder.string().unwrap();
 
                     send_email(
-                        &user.email,
+                        user.email,
                         format!(
                             "Reservation has been reviewed: {:?}",
                             reservation_updated.id
-                        )
-                        .as_str(),
-                        &email_body,
+                        ),
+                        email_body,
                     )
                     .await
                     .unwrap();
