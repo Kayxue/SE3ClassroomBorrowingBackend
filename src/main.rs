@@ -32,11 +32,11 @@ mod routes;
 
 use argon_hasher::hash;
 use login_system::AuthBackend;
+use routes::announcement::announcement_router;
 use routes::classroom::classroom_router;
 use routes::key::key_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
-use routes::announcement::announcement_router;
 
 use crate::email_client::{EmailClientConfig, set_email_client_config};
 
