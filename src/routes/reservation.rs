@@ -376,14 +376,11 @@ pub fn reservation_router() -> Router<AppState> {
     let login_required_route = Router::new()
         .route("/", post(create_reservation))
         .route("/{id}", put(update_reservation))
-        .route_layer(login_required!(AuthBackend));
-
-    let general_reservation_route = Router::new()
         .route("/status/{status}", get(get_reservations_by_status))
-        .route("/all", get(get_all_reservations));
+        .route("/all", get(get_all_reservations))
+        .route_layer(login_required!(AuthBackend));
 
     Router::new()
         .merge(admin_only_route)
         .merge(login_required_route)
-        .merge(general_reservation_route)
 }
