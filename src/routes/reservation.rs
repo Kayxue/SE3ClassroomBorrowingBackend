@@ -362,19 +362,39 @@ pub async fn get_all_reservations(State(state): State<AppState>) -> impl IntoRes
     }
 }
 
+#[utoipa::path(
+    get,
+    tags = ["Reservation"],
+    description = "Get all reservations for self",
+    path = "/self",
+    responses(
+        (status = 200, description = "List of all reservations", body = [reservation::Model]),
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn get_all_reservations_for_self(session: AuthSession, State(state): State<AppState>) -> impl IntoResponse {
+    let user = session.user.unwrap();
+    let reservations = match reservation::Entity::find().filter(reservation::Column::UserId.eq(user.id)).all(&state.db).await {
+        Ok(reservations) => reservations,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
+    };
+    (StatusCode::OK, Json(reservations)).into_response()
+}
+
 // ===============================
 //   Reservation Router
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
         .route("/{id}/review", put(review_reservation))
+        .route("/status/{status}", get(get_reservations_by_status))
+        .route("/all", get(get_all_reservations))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
     let login_required_route = Router::new()
         .route("/", post(create_reservation))
         .route("/{id}", put(update_reservation))
-        .route("/status/{status}", get(get_reservations_by_status))
-        .route("/all", get(get_all_reservations))
+        .route("/self", get(get_all_reservations_for_self))
         .route_layer(login_required!(AuthBackend));
 
     Router::new()
