@@ -10,6 +10,8 @@ use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, Mode
 use serde::Deserialize;
 use string_builder::Builder;
 use utoipa::ToSchema;
+use sea_orm::prelude::DateTime;
+use chrono::{NaiveDateTime, DateTime as ChronoDateTime};
 
 use crate::{
     AppState,
@@ -471,6 +473,21 @@ pub struct SelfListQuery {
     ),
     security(("session_cookie" = []))
 )]
+fn parse_dt(s: &str) -> Result<DateTime, ()> {
+    if let Ok(dt) = ChronoDateTime::parse_from_rfc3339(s) {
+        return Ok(dt.naive_utc()); 
+    }
+
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+        return Ok(dt);
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+        return Ok(dt);
+    }
+
+    Err(())
+}
+
 pub async fn get_self_reservations_filtered(
     session: AuthSession,
     State(state): State<AppState>,
@@ -503,8 +520,9 @@ pub async fn get_self_reservations_filtered(
         find_query = find_query.filter(reservation::Column::StartTime.gte(from_dt));
     }
 
+
     if let Some(to) = query.to {
-        let to_dt = match to.parse() {
+        let to_dt: DateTime = match parse_dt(&to) {
             Ok(v) => v,
             Err(_) => return (StatusCode::BAD_REQUEST, "Invalid 'to'").into_response(),
         };
