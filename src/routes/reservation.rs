@@ -6,11 +6,10 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use axum_login::{login_required, permission_required};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
 use serde::Deserialize;
 use string_builder::Builder;
 use utoipa::ToSchema;
-use sea_orm::prelude::DateTime;
 
 use crate::{
     AppState,
@@ -69,8 +68,8 @@ pub async fn create_reservation(
         user_id: Set(Some(user.id)),
         classroom_id: Set(Some(body.classroom_id)),
         purpose: Set(body.purpose),
-        start_time: Set(body.start_time.parse::<DateTime>().unwrap()),
-        end_time: Set(body.end_time.parse::<DateTime>().unwrap()),
+        start_time: Set(body.start_time.parse().unwrap()),
+        end_time: Set(body.end_time.parse().unwrap()),
         approved_by: Set(None),
         reject_reason: Set(None),
         cancel_reason: Set(None),
@@ -295,10 +294,10 @@ pub async fn update_reservation(
         reservation.purpose = Set(p);
     }
     if let Some(start) = start_time {
-        reservation.start_time = Set(start.parse::<DateTime>().unwrap());
+        reservation.start_time = Set(start.parse().unwrap());
     }
     if let Some(end) = end_time {
-        reservation.end_time = Set(end.parse::<DateTime>().unwrap());
+        reservation.end_time = Set(end.parse().unwrap());
     }
 
     match reservation.update(&state.db).await {
@@ -442,110 +441,6 @@ pub async fn cancel_reservation(
     }
 }
 // ===============================
-//   SelfListQuery
-// ===============================
-#[derive(Deserialize, ToSchema)]
-pub struct SelfListQuery {
-    pub status: Option<ReservationStatus>,
-    pub classroom_id: Option<String>,
-    pub from: Option<String>,
-    pub to: Option<String>,
-    pub sort: Option<String>, // asc | desc
-}
-
-fn parse_dt(s: &str) -> Result<DateTime, ()> {
-    let raw = s.trim();
-
-    if let Ok(dt) = raw.parse::<DateTime>() {
-        return Ok(dt);
-    }
-
-    if raw.len() >= 19 {
-        let mut head = raw[..19].to_string(); 
-        if head.as_bytes().get(10) == Some(&b'T') {
-            head.replace_range(10..11, " "); 
-        }
-
-        if let Ok(dt) = head.parse::<DateTime>() {
-            return Ok(dt);
-        }
-    }
-
-    // 你也可視需要在這裡補更多 normalize 規則（例如沒有秒數）
-    Err(())
-}
-
-#[utoipa::path(
-    get,
-    tags = ["Reservation"],
-    description = "Get reservations for self with filters (time range, classroom, status) and sorting",
-    path = "/self/list",
-    params(
-        ("status" = Option<ReservationStatus>, Query, description = "Filter by status"),
-        ("classroom_id" = Option<String>, Query, description = "Filter by classroom id"),
-        ("from" = Option<String>, Query, description = "Filter: start_time >= from (ISO8601)"),
-        ("to" = Option<String>, Query, description = "Filter: start_time <= to (ISO8601)"),
-        ("sort" = Option<String>, Query, description = "Sort by start_time: asc|desc (default desc)")
-    ),
-    responses(
-        (status = 200, description = "List of reservations", body = [reservation::Model]),
-        (status = 401, description = "Unauthorized"),
-        (status = 400, description = "Invalid query"),
-        (status = 500, description = "Failed to fetch reservations")
-    ),
-    security(("session_cookie" = []))
-)]
-pub async fn get_self_reservations_filtered(
-    session: AuthSession,
-    State(state): State<AppState>,
-    Query(query): Query<SelfListQuery>,
-) -> impl IntoResponse {
-    let user = match session.user {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
-
-    let mut find_query = reservation::Entity::find()
-        .filter(reservation::Column::UserId.eq(Some(user.id)));
-
-    if let Some(status) = query.status {
-        find_query = find_query.filter(reservation::Column::Status.eq(status));
-    }
-
-    if let Some(classroom_id) = query.classroom_id {
-        find_query = find_query.filter(reservation::Column::ClassroomId.eq(Some(classroom_id)));
-    }
-
-    if let Some(from) = query.from {
-        let from_dt: DateTime = match parse_dt(&from) {
-            Ok(v) => v,
-            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid 'from'").into_response(),
-        };
-        find_query = find_query.filter(reservation::Column::StartTime.gte(from_dt));
-    }
-
-    if let Some(to) = query.to {
-        let to_dt: DateTime = match parse_dt(&to) {
-            Ok(v) => v,
-            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid 'to'").into_response(),
-        };
-        find_query = find_query.filter(reservation::Column::StartTime.lte(to_dt));
-    }
-
-    match query.sort.as_deref() {
-        Some("asc") => find_query = find_query.order_by_asc(reservation::Column::StartTime),
-        Some("desc") | None => find_query = find_query.order_by_desc(reservation::Column::StartTime),
-        Some(_) => return (StatusCode::BAD_REQUEST, "Invalid 'sort'").into_response(),
-    }
-
-    match find_query.all(&state.db).await {
-        Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
-    }
-}
-
-
-// ===============================
 //   Reservation Router
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
@@ -557,7 +452,6 @@ pub fn reservation_router() -> Router<AppState> {
     let login_required_route = Router::new()
         .route("/", post(create_reservation))
         .route("/self", get(get_all_reservations_for_self))
-        .route("/self/list", get(get_self_reservations_filtered))
         .route("/{id}", put(update_reservation))
         .route("/{id}", delete(cancel_reservation))
         .route_layer(login_required!(AuthBackend));
