@@ -453,6 +453,20 @@ pub struct SelfListQuery {
     pub to: Option<String>,
     pub sort: Option<String>, // asc | desc
 }
+
+fn parse_dt(s: &str) -> Result<DateTime, ()> {
+    if let Ok(dt) = ChronoDateTime::parse_from_rfc3339(s) {
+        return Ok(dt.naive_utc());
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+        return Ok(dt);
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+        return Ok(dt);
+    }
+    Err(())
+}
+
 #[utoipa::path(
     get,
     tags = ["Reservation"],
@@ -473,21 +487,6 @@ pub struct SelfListQuery {
     ),
     security(("session_cookie" = []))
 )]
-fn parse_dt(s: &str) -> Result<DateTime, ()> {
-    if let Ok(dt) = ChronoDateTime::parse_from_rfc3339(s) {
-        return Ok(dt.naive_utc()); 
-    }
-
-    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
-        return Ok(dt);
-    }
-    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
-        return Ok(dt);
-    }
-
-    Err(())
-}
-
 pub async fn get_self_reservations_filtered(
     session: AuthSession,
     State(state): State<AppState>,
@@ -501,25 +500,21 @@ pub async fn get_self_reservations_filtered(
     let mut find_query = reservation::Entity::find()
         .filter(reservation::Column::UserId.eq(Some(user.id)));
 
-    // status
     if let Some(status) = query.status {
         find_query = find_query.filter(reservation::Column::Status.eq(status));
     }
 
-    // classroom
     if let Some(classroom_id) = query.classroom_id {
         find_query = find_query.filter(reservation::Column::ClassroomId.eq(Some(classroom_id)));
     }
 
-    // time range (on start_time)
     if let Some(from) = query.from {
-        let from_dt = match from.parse() {
+        let from_dt: DateTime = match parse_dt(&from) {
             Ok(v) => v,
             Err(_) => return (StatusCode::BAD_REQUEST, "Invalid 'from'").into_response(),
         };
         find_query = find_query.filter(reservation::Column::StartTime.gte(from_dt));
     }
-
 
     if let Some(to) = query.to {
         let to_dt: DateTime = match parse_dt(&to) {
@@ -529,7 +524,6 @@ pub async fn get_self_reservations_filtered(
         find_query = find_query.filter(reservation::Column::StartTime.lte(to_dt));
     }
 
-    // sort
     match query.sort.as_deref() {
         Some("asc") => find_query = find_query.order_by_asc(reservation::Column::StartTime),
         Some("desc") | None => find_query = find_query.order_by_desc(reservation::Column::StartTime),
@@ -538,11 +532,7 @@ pub async fn get_self_reservations_filtered(
 
     match find_query.all(&state.db).await {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to fetch reservations",
-        )
-            .into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
     }
 }
 
