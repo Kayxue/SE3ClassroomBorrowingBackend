@@ -3,10 +3,10 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use axum_login::{login_required, permission_required};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
 use serde::Deserialize;
 use string_builder::Builder;
 use utoipa::ToSchema;
@@ -378,6 +378,68 @@ pub async fn get_all_reservations_for_self(
     (StatusCode::OK, Json(reservations)).into_response()
 }
 
+#[utoipa::path(
+    delete,
+    tags = ["Reservation"],
+    description = "Cancel a reservation",
+    path = "/{id}",
+    responses(
+        (status = 200, description = "Reservation cancelled successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Reservation not found"),
+        (status = 500, description = "Failed to cancel reservation"),
+    ),
+    params(("id" = String, Path)),
+    security(("session_cookie" = []))
+)]
+pub async fn cancel_reservation(
+    session: AuthSession,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let user = match session.user {
+        Some(u) => u,
+        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    };
+
+    let reservation = match reservation::Entity::find_by_id(&id).one(&state.db).await {
+        Ok(Some(reservation)) => reservation,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch reservation",
+            )
+                .into_response();
+        }
+    };
+
+    if reservation.user_id != Some(user.id) {
+        return (
+            StatusCode::FORBIDDEN,
+            "You can only cancel your own reservation",
+        )
+            .into_response();
+    }
+
+    if reservation.status != ReservationStatus::Pending {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Only pending reservations can be cancelled",
+        )
+            .into_response();
+    }
+
+    match reservation.delete(&state.db).await {
+        Ok(_) => (StatusCode::OK, "Reservation cancelled successfully").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to cancel reservation",
+        )
+            .into_response(),
+    }
+}
 // ===============================
 //   Reservation Router
 // ===============================
@@ -389,8 +451,9 @@ pub fn reservation_router() -> Router<AppState> {
 
     let login_required_route = Router::new()
         .route("/", post(create_reservation))
-        .route("/{id}", put(update_reservation))
         .route("/self", get(get_all_reservations_for_self))
+        .route("/{id}", put(update_reservation))
+        .route("/{id}", delete(cancel_reservation))
         .route_layer(login_required!(AuthBackend));
 
     Router::new()
