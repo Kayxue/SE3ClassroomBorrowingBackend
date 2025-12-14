@@ -34,6 +34,7 @@ use argon_hasher::hash;
 use login_system::AuthBackend;
 use routes::announcement::announcement_router;
 use routes::classroom::classroom_router;
+use routes::infraction::infraction_router;
 use routes::key::key_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
@@ -100,6 +101,26 @@ impl utoipa::Modify for SecurityAddon {
         }
     }
 }
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
+        (name = "Infraction", description = "Infraction endpoints")
+    ),
+    paths(
+        routes::infraction::create_infraction,
+        routes::infraction::update_infraction,
+        routes::infraction::delete_infraction,
+        routes::infraction::list_infractions,
+        routes::infraction::get_infraction,
+    ),
+    components(schemas(
+        entities::infraction::Model,
+        routes::infraction::CreateInfractionBody,
+        routes::infraction::UpdateInfractionBody,
+    ))
+)]
+struct InfractionApi;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -222,7 +243,7 @@ struct ClassroomApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi), (path = "/announcement", api = AnnouncementApi)),
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi), (path = "/announcement", api = AnnouncementApi), (path = "/infraction", api = InfractionApi)),
     tags((name = "Root", description = "Root endpoints")),
     paths(
         root,
@@ -261,7 +282,10 @@ struct ClassroomApi;
             routes::announcement::CreateAnnouncementBody,
             entities::announcement::Model,
             routes::key::BorrowKeyBody,
-            routes::key::ReturnKeyBody
+            routes::key::ReturnKeyBody,
+            routes::infraction::CreateInfractionBody,
+            routes::infraction::UpdateInfractionBody,
+            entities::infraction::Model,
         )
     )
 )]
@@ -351,6 +375,7 @@ async fn main() {
         .nest("/reservation", reservation_router())
         .nest("/key", key_router())
         .nest("/announcement", announcement_router())
+        .nest("/infraction", infraction_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
