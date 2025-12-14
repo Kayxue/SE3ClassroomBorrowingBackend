@@ -31,27 +31,11 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::announcement::Entity")]
     Announcement,
-    #[sea_orm(has_many = "super::booking_change_log::Entity")]
-    BookingChangeLog,
-    #[sea_orm(has_many = "super::notification_log::Entity")]
-    NotificationLog,
 }
 
 impl Related<super::announcement::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Announcement.def()
-    }
-}
-
-impl Related<super::booking_change_log::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::BookingChangeLog.def()
-    }
-}
-
-impl Related<super::notification_log::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::NotificationLog.def()
     }
 }
 

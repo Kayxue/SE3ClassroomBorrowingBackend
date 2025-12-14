@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post, put},
@@ -33,6 +33,11 @@ pub struct CreateReservationBody {
     pub purpose: String,
     pub start_time: String,
     pub end_time: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct GetReservationsQuery {
+    pub status: Option<ReservationStatus>,
 }
 
 #[utoipa::path(
@@ -310,49 +315,28 @@ pub async fn update_reservation(
 #[utoipa::path(
     get,
     tags = ["Reservation"],
-    description = "Get all reservations with a specific status (Admin only)",
-    path = "/status/{status}",
+    description = "Get all reservations (Admin only)",
+    path = "",
     responses(
         (status = 200, description = "List of reservations with the specified status", body = [reservation::Model]),
         (status = 500, description = "Failed to fetch reservations")
     ),
-    params(("status" = ReservationStatus, Path)),
-    security(("session_cookie" = []))
-)]
-pub async fn get_reservations_by_status(
-    State(state): State<AppState>,
-    Path(status): Path<ReservationStatus>,
-) -> impl IntoResponse {
-    match reservation::Entity::find()
-        .filter(reservation::Column::Status.eq(status))
-        .all(&state.db)
-        .await
-    {
-        Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to fetch reservations",
-        )
-            .into_response(),
-    }
-}
-
-// ===============================
-//   Get All Reservations
-// ===============================
-#[utoipa::path(
-    get,
-    tags = ["Reservation"],
-    description = "Get all reservations (Admin only)",
-    path = "/all",
-    responses(
-        (status = 200, description = "List of all reservations", body = [reservation::Model]),
-        (status = 500, description = "Failed to fetch reservations")
+    params(
+        ("status" = Option<ReservationStatus>, Query, description = "Status of the reservations to fetch")
     ),
     security(("session_cookie" = []))
 )]
-pub async fn get_all_reservations(State(state): State<AppState>) -> impl IntoResponse {
-    match reservation::Entity::find().all(&state.db).await {
+pub async fn get_reservations(
+    State(state): State<AppState>,
+    Query(query): Query<GetReservationsQuery>,
+) -> impl IntoResponse {
+    let mut find_query = reservation::Entity::find();
+    
+    if let Some(status) = query.status {
+        find_query = find_query.filter(reservation::Column::Status.eq(status));
+    }
+    
+    match find_query.all(&state.db).await {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -387,8 +371,7 @@ pub async fn get_all_reservations_for_self(session: AuthSession, State(state): S
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
         .route("/{id}/review", put(review_reservation))
-        .route("/status/{status}", get(get_reservations_by_status))
-        .route("/all", get(get_all_reservations))
+        .route("/", get(get_reservations))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
 
     let login_required_route = Router::new()

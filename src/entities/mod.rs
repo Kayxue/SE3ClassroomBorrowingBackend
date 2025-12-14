@@ -4,12 +4,10 @@ pub mod prelude;
 
 pub mod announcement;
 pub mod black_list;
-pub mod booking_change_log;
 pub mod classroom;
 pub mod infraction;
 pub mod key;
 pub mod key_transaction_log;
-pub mod notification_log;
 pub mod reservation;
 pub mod sea_orm_active_enums;
 pub mod user;

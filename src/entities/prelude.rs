@@ -2,11 +2,9 @@
 
 pub use super::announcement::Entity as Announcement;
 pub use super::black_list::Entity as BlackList;
-pub use super::booking_change_log::Entity as BookingChangeLog;
 pub use super::classroom::Entity as Classroom;
 pub use super::infraction::Entity as Infraction;
 pub use super::key::Entity as Key;
 pub use super::key_transaction_log::Entity as KeyTransactionLog;
-pub use super::notification_log::Entity as NotificationLog;
 pub use super::reservation::Entity as Reservation;
 pub use super::user::Entity as User;

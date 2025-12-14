@@ -173,8 +173,8 @@ struct KeyApi;
         routes::reservation::review_reservation,
         routes::reservation::create_reservation,
         routes::reservation::update_reservation,
-        routes::reservation::get_reservations_by_status,
-        routes::reservation::get_all_reservations,
+        routes::reservation::get_reservations,
+        routes::reservation::get_all_reservations_for_self,
     ),
     components(schemas(
         entities::reservation::Model,
@@ -182,6 +182,7 @@ struct KeyApi;
         routes::reservation::ReviewReservationBody,
         routes::reservation::CreateReservationBody,
         routes::reservation::UpdateReservationBody,
+        routes::reservation::GetReservationsQuery,
     ))
 )]
 struct ReservationApi;
@@ -269,6 +270,7 @@ struct ClassroomApi;
             routes::user::UpdatePasswordBody,
             routes::reservation::ReviewReservationBody,
             entities::reservation::Model,
+            routes::reservation::GetReservationsQuery,
             entities::sea_orm_active_enums::ReservationStatus,
             routes::classroom::GetClassroomResponse,
             routes::classroom::GetClassroomKeyResponse,
