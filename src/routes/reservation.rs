@@ -11,7 +11,6 @@ use serde::Deserialize;
 use string_builder::Builder;
 use utoipa::ToSchema;
 use sea_orm::prelude::DateTime;
-use chrono::{NaiveDateTime, DateTime as ChronoDateTime};
 
 use crate::{
     AppState,
@@ -70,8 +69,8 @@ pub async fn create_reservation(
         user_id: Set(Some(user.id)),
         classroom_id: Set(Some(body.classroom_id)),
         purpose: Set(body.purpose),
-        start_time: Set(body.start_time.parse().unwrap()),
-        end_time: Set(body.end_time.parse().unwrap()),
+        start_time: Set(body.start_time.parse::<DateTime>().unwrap()),
+        end_time: Set(body.end_time.parse::<DateTime>().unwrap()),
         approved_by: Set(None),
         reject_reason: Set(None),
         cancel_reason: Set(None),
@@ -296,10 +295,10 @@ pub async fn update_reservation(
         reservation.purpose = Set(p);
     }
     if let Some(start) = start_time {
-        reservation.start_time = Set(start.parse().unwrap());
+        reservation.start_time = Set(start.parse::<DateTime>().unwrap());
     }
     if let Some(end) = end_time {
-        reservation.end_time = Set(end.parse().unwrap());
+        reservation.end_time = Set(end.parse::<DateTime>().unwrap());
     }
 
     match reservation.update(&state.db).await {
@@ -455,15 +454,24 @@ pub struct SelfListQuery {
 }
 
 fn parse_dt(s: &str) -> Result<DateTime, ()> {
-    if let Ok(dt) = ChronoDateTime::parse_from_rfc3339(s) {
-        return Ok(dt.naive_utc());
-    }
-    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+    let raw = s.trim();
+
+    if let Ok(dt) = raw.parse::<DateTime>() {
         return Ok(dt);
     }
-    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
-        return Ok(dt);
+
+    if raw.len() >= 19 {
+        let mut head = raw[..19].to_string(); 
+        if head.as_bytes().get(10) == Some(&b'T') {
+            head.replace_range(10..11, " "); 
+        }
+
+        if let Ok(dt) = head.parse::<DateTime>() {
+            return Ok(dt);
+        }
     }
+
+    // 你也可視需要在這裡補更多 normalize 規則（例如沒有秒數）
     Err(())
 }
 
