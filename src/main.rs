@@ -175,6 +175,7 @@ struct KeyApi;
         routes::reservation::update_reservation,
         routes::reservation::get_reservations,
         routes::reservation::get_all_reservations_for_self,
+        routes::reservation::cancel_reservation,
     ),
     components(schemas(
         entities::reservation::Model,
