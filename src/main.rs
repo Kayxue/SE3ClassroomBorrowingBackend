@@ -38,6 +38,7 @@ use routes::infraction::infraction_router;
 use routes::key::key_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
+use routes::black_list::black_list_router;
 
 use crate::email_client::{EmailClientConfig, set_email_client_config};
 
@@ -381,6 +382,7 @@ async fn main() {
         .nest("/key", key_router())
         .nest("/announcement", announcement_router())
         .nest("/infraction", infraction_router())
+        .nest("/black_list", black_list_router())
         .with_state(app_state)
         .merge(Scalar::with_url("/docs", ApiDoc::openapi()))
         .layer(ServiceBuilder::new().layer(auth_layer));
