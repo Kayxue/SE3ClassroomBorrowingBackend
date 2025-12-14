@@ -10,6 +10,7 @@ use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, Mode
 use serde::Deserialize;
 use string_builder::Builder;
 use utoipa::ToSchema;
+use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
 
 use crate::{
     AppState,
@@ -23,6 +24,36 @@ use crate::{
 };
 
 use nanoid::nanoid;
+
+// ===============================
+//   datetime parser (minimal add)
+// ===============================
+fn parse_dt(s: &str) -> Result<ChronoDateTime<FixedOffset>, ()> {
+    let raw = s.trim();
+
+    // 1) already has offset / Z
+    if let Ok(dt) = raw.parse::<ChronoDateTime<FixedOffset>>() {
+        return Ok(dt);
+    }
+
+    // 2) normalize then append +08:00 (Taiwan)
+    let mut base = raw.to_string();
+
+    // "YYYY-MM-DD HH:MM" -> "YYYY-MM-DDTHH:MM"
+    if base.as_bytes().get(10) == Some(&b' ') {
+        base.replace_range(10..11, "T");
+    }
+
+    // add seconds
+    if base.len() == 16 {
+        base.push_str(":00");
+    }
+
+    // add timezone
+    base.push_str("+08:00");
+
+    base.parse::<ChronoDateTime<FixedOffset>>().map_err(|_| ())
+}
 
 // ===============================
 //   Create Reservation (User)
@@ -63,13 +94,22 @@ pub async fn create_reservation(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
 
+    let start_dt = match parse_dt(&body.start_time) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid start_time").into_response(),
+    };
+    let end_dt = match parse_dt(&body.end_time) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid end_time").into_response(),
+    };
+
     let new_reservation = reservation::ActiveModel {
         id: Set(nanoid!()),
         user_id: Set(Some(user.id)),
         classroom_id: Set(Some(body.classroom_id)),
         purpose: Set(body.purpose),
-        start_time: Set(body.start_time.parse().unwrap()),
-        end_time: Set(body.end_time.parse().unwrap()),
+        start_time: Set(start_dt),
+        end_time: Set(end_dt),
         approved_by: Set(None),
         reject_reason: Set(None),
         cancel_reason: Set(None),
@@ -88,6 +128,7 @@ pub async fn create_reservation(
             )
             .await
             .unwrap();
+
             match user::Entity::find()
                 .filter(user::Column::Role.eq(Role::Admin))
                 .all(&state.db)
@@ -102,7 +143,8 @@ pub async fn create_reservation(
                                 "There is a new reservation request. Reservation ID: {}",
                                 model.id
                             ),
-                        );
+                        )
+                        .await;
                     }
                 }
                 Err(_) => {
@@ -110,6 +152,7 @@ pub async fn create_reservation(
                         .into_response();
                 }
             }
+
             (StatusCode::CREATED, Json(model)).into_response()
         }
         Err(_) => (
@@ -293,11 +336,21 @@ pub async fn update_reservation(
     if let Some(p) = purpose {
         reservation.purpose = Set(p);
     }
+
     if let Some(start) = start_time {
-        reservation.start_time = Set(start.parse().unwrap());
+        let start_dt = match parse_dt(&start) {
+            Ok(v) => v,
+            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid start_time").into_response(),
+        };
+        reservation.start_time = Set(start_dt);
     }
+
     if let Some(end) = end_time {
-        reservation.end_time = Set(end.parse().unwrap());
+        let end_dt = match parse_dt(&end) {
+            Ok(v) => v,
+            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid end_time").into_response(),
+        };
+        reservation.end_time = Set(end_dt);
     }
 
     match reservation.update(&state.db).await {
@@ -309,6 +362,7 @@ pub async fn update_reservation(
             .into_response(),
     }
 }
+
 // ===============================
 //   Get Reservations by Status
 // ===============================
@@ -440,6 +494,7 @@ pub async fn cancel_reservation(
             .into_response(),
     }
 }
+
 // ===============================
 //   Reservation Router
 // ===============================
