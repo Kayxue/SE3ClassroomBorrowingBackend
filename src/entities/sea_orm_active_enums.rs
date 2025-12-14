@@ -7,20 +7,6 @@ use utoipa::ToSchema;
 #[derive(
     Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
 )]
-#[sea_orm(
-    rs_type = "String",
-    db_type = "Enum",
-    enum_name = "BookingChangeAction"
-)]
-pub enum BookingChangeAction {
-    #[sea_orm(string_value = "approve")]
-    Approve,
-    #[sea_orm(string_value = "reject")]
-    Reject,
-}
-#[derive(
-    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
-)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "ClassroomStatus")]
 pub enum ClassroomStatus {
     #[sea_orm(string_value = "available")]
