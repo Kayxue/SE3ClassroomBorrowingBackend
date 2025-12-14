@@ -331,11 +331,11 @@ pub async fn get_reservations(
     Query(query): Query<GetReservationsQuery>,
 ) -> impl IntoResponse {
     let mut find_query = reservation::Entity::find();
-    
+
     if let Some(status) = query.status {
         find_query = find_query.filter(reservation::Column::Status.eq(status));
     }
-    
+
     match find_query.all(&state.db).await {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
         Err(_) => (
@@ -356,11 +356,24 @@ pub async fn get_reservations(
     ),
     security(("session_cookie" = []))
 )]
-pub async fn get_all_reservations_for_self(session: AuthSession, State(state): State<AppState>) -> impl IntoResponse {
+pub async fn get_all_reservations_for_self(
+    session: AuthSession,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
     let user = session.user.unwrap();
-    let reservations = match reservation::Entity::find().filter(reservation::Column::UserId.eq(user.id)).all(&state.db).await {
+    let reservations = match reservation::Entity::find()
+        .filter(reservation::Column::UserId.eq(user.id))
+        .all(&state.db)
+        .await
+    {
         Ok(reservations) => reservations,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch reservations",
+            )
+                .into_response();
+        }
     };
     (StatusCode::OK, Json(reservations)).into_response()
 }

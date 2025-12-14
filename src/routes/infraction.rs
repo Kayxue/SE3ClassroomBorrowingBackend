@@ -1,11 +1,25 @@
-use axum::{Json, Router, extract::{Path, State}, http::StatusCode, response::IntoResponse, routing::{delete, get, post, put}};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{delete, get, post, put},
+};
 use axum_login::{login_required, permission_required};
-use sea_orm::{ActiveModelTrait, ActiveValue::{NotSet, Set}, ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait,
+    ActiveValue::{NotSet, Set},
+    ColumnTrait, EntityTrait, ModelTrait, QueryFilter,
+};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
+use crate::{
+    AppState,
+    entities::{infraction, sea_orm_active_enums::Role},
+    login_system::{AuthBackend, AuthSession},
+};
 use nanoid::nanoid;
-use crate::{AppState, entities::{infraction, sea_orm_active_enums::Role}, login_system::{AuthBackend, AuthSession}};
 
 #[derive(Deserialize, ToSchema)]
 pub struct CreateInfractionBody {
@@ -45,7 +59,11 @@ pub async fn create_infraction(
     };
     match new_infraction.insert(&state.db).await {
         Ok(infraction) => (StatusCode::CREATED, Json(infraction)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create infraction").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create infraction",
+        )
+            .into_response(),
     }
 }
 
@@ -67,7 +85,13 @@ pub async fn update_infraction(
     let infraction = match infraction::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(infraction)) => infraction,
         Ok(None) => return (StatusCode::NOT_FOUND, "Infraction not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch infraction").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch infraction",
+            )
+                .into_response();
+        }
     };
     let mut updated_infraction: infraction::ActiveModel = infraction.into();
     updated_infraction.description = Set(body.description);
@@ -97,7 +121,13 @@ pub async fn delete_infraction(
     let infraction = match infraction::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(infraction)) => infraction,
         Ok(None) => return (StatusCode::NOT_FOUND, "Infraction not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch infraction").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch infraction",
+            )
+                .into_response();
+        }
     };
     match infraction.delete(&state.db).await {
         Ok(_) => (StatusCode::OK, "Infraction deleted successfully").into_response(),
@@ -125,7 +155,13 @@ pub async fn get_infraction(
     let infraction = match infraction::Entity::find_by_id(id).one(&state.db).await {
         Ok(Some(infraction)) => infraction,
         Ok(None) => return (StatusCode::NOT_FOUND, "Infraction not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch infraction").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch infraction",
+            )
+                .into_response();
+        }
     };
     (StatusCode::OK, Json(infraction)).into_response()
 }
@@ -139,11 +175,24 @@ pub async fn get_infraction(
         (status = 200, description = "Infractions fetched successfully", body = Vec<infraction::Model>),
     )
 )]
-pub async fn list_infractions(session: AuthSession, State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_infractions(
+    session: AuthSession,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
     let user = session.user.unwrap();
-    let infractions = match infraction::Entity::find().filter(infraction::Column::UserId.eq(user.id)).all(&state.db).await {
+    let infractions = match infraction::Entity::find()
+        .filter(infraction::Column::UserId.eq(user.id))
+        .all(&state.db)
+        .await
+    {
         Ok(infractions) => infractions,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch infractions").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch infractions",
+            )
+                .into_response();
+        }
     };
     (StatusCode::OK, Json(infractions)).into_response()
 }
