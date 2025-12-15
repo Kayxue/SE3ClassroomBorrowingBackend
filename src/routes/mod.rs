@@ -5,3 +5,4 @@ pub mod key;
 pub mod reservation;
 pub mod user;
 pub mod black_list;
+pub mod password;

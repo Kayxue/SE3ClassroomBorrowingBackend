@@ -11,3 +11,4 @@ pub mod key_transaction_log;
 pub mod reservation;
 pub mod sea_orm_active_enums;
 pub mod user;
+pub mod password_reset;
