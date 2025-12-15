@@ -179,6 +179,7 @@ struct KeyApi;
         routes::reservation::update_reservation,
         routes::reservation::get_reservations,
         routes::reservation::get_all_reservations_for_self,
+        routes::reservation::admin_list_reservations,
         routes::reservation::cancel_reservation,
         routes::reservation::get_self_reservations_filtered
     ),
@@ -190,6 +191,8 @@ struct KeyApi;
         routes::reservation::UpdateReservationBody,
         routes::reservation::GetReservationsQuery,
         routes::reservation::SelfListQuery,
+        routes::reservation::AdminListQuery,
+        routes::reservation::PagedReservations
     ))
 )]
 struct ReservationApi;
