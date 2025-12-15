@@ -29,6 +29,9 @@ mod email_client;
 mod entities;
 mod login_system;
 mod routes;
+mod utils;
+#[cfg(test)]
+mod utils_test;
 
 use argon_hasher::hash;
 use login_system::AuthBackend;
