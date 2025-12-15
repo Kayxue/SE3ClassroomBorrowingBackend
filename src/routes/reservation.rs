@@ -6,8 +6,8 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use axum_login::{login_required, permission_required};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder};
-use serde::Deserialize;
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, PaginatorTrait};
+use serde::{Deserialize, Serialize};
 use string_builder::Builder;
 use utoipa::ToSchema;
 use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
@@ -24,6 +24,32 @@ use crate::{
 };
 
 use nanoid::nanoid;
+
+// ===============================
+//   Admin List Query
+// ===============================
+#[derive(Deserialize, ToSchema)]
+pub struct AdminListQuery {
+    pub status: Option<ReservationStatus>,
+    pub classroom_id: Option<String>,
+    pub user_id: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub sort: Option<String>,      // asc|desc (default desc)
+    pub page: Option<u64>,         // default 1
+    pub page_size: Option<u64>,    // default 20, max 100
+}
+
+// ===============================
+//   Paged Response
+// ===============================
+#[derive(Serialize, ToSchema)]
+pub struct PagedReservations {
+    pub page: u64,
+    pub page_size: u64,
+    pub total: u64,
+    pub items: Vec<reservation::Model>,
+}
 
 // ===============================
 //   datetime parser (minimal add)
@@ -577,10 +603,121 @@ pub async fn get_self_reservations_filtered(
 }
 
 // ===============================
+//   Admin List Handler
+// ===============================
+#[utoipa::path(
+    get,
+    tags = ["Reservation"],
+    description = "Admin: list reservations with filters (status/classroom/user/time overlap) and pagination",
+    path = "/admin/list",
+    params(
+        ("status" = Option<ReservationStatus>, Query, description = "Filter by status"),
+        ("classroom_id" = Option<String>, Query, description = "Filter by classroom id"),
+        ("user_id" = Option<String>, Query, description = "Filter by user id"),
+        ("from" = Option<String>, Query, description = "Time filter lower bound (overlap), ISO8601 or 'YYYY-MM-DD HH:MM'"),
+        ("to" = Option<String>, Query, description = "Time filter upper bound (overlap), ISO8601 or 'YYYY-MM-DD HH:MM'"),
+        ("sort" = Option<String>, Query, description = "Sort by start_time: asc|desc (default desc)"),
+        ("page" = Option<u64>, Query, description = "Page number (default 1)"),
+        ("page_size" = Option<u64>, Query, description = "Page size (default 20, max 100)")
+    ),
+    responses(
+        (status = 200, description = "Paged list", body = PagedReservations),
+        (status = 400, description = "Invalid query"),
+        (status = 500, description = "Failed to fetch reservations")
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn admin_list_reservations(
+    State(state): State<AppState>,
+    Query(query): Query<AdminListQuery>,
+) -> impl IntoResponse {
+    let mut find_query = reservation::Entity::find();
+
+    // status
+    if let Some(status) = query.status {
+        find_query = find_query.filter(reservation::Column::Status.eq(status));
+    }
+
+    // classroom
+    if let Some(classroom_id) = query.classroom_id {
+        find_query = find_query.filter(reservation::Column::ClassroomId.eq(Some(classroom_id)));
+    }
+
+    // user_id
+    if let Some(user_id) = query.user_id {
+        find_query = find_query.filter(reservation::Column::UserId.eq(Some(user_id)));
+    }
+
+    // time overlap: require both from & to
+    if query.from.is_some() || query.to.is_some() {
+        let from = match query.from.as_deref() {
+            Some(v) => v,
+            None => return (StatusCode::BAD_REQUEST, "Missing 'from'").into_response(),
+        };
+        let to = match query.to.as_deref() {
+            Some(v) => v,
+            None => return (StatusCode::BAD_REQUEST, "Missing 'to'").into_response(),
+        };
+
+        let from_dt = match parse_dt(from) {
+            Ok(v) => v,
+            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid 'from'").into_response(),
+        };
+        let to_dt = match parse_dt(to) {
+            Ok(v) => v,
+            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid 'to'").into_response(),
+        };
+
+        if from_dt >= to_dt {
+            return (StatusCode::BAD_REQUEST, "'from' must be < 'to'").into_response();
+        }
+
+        // overlap: start < to AND end > from
+        find_query = find_query
+            .filter(reservation::Column::StartTime.lt(to_dt))
+            .filter(reservation::Column::EndTime.gt(from_dt));
+    }
+
+    // sorting
+    match query.sort.as_deref() {
+        Some("asc") => find_query = find_query.order_by_asc(reservation::Column::StartTime),
+        Some("desc") | None => find_query = find_query.order_by_desc(reservation::Column::StartTime),
+        Some(_) => return (StatusCode::BAD_REQUEST, "Invalid 'sort'").into_response(),
+    }
+
+    // pagination
+    let page_size = query.page_size.unwrap_or(20).min(100).max(1);
+    let page = query.page.unwrap_or(1).max(1);
+
+    let paginator = find_query.paginate(&state.db, page_size);
+    let total = match paginator.num_items().await {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to count").into_response(),
+    };
+
+    let items = match paginator.fetch_page(page - 1).await {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch").into_response(),
+    };
+
+    (
+        StatusCode::OK,
+        Json(PagedReservations {
+            page,
+            page_size,
+            total,
+            items,
+        }),
+    )
+        .into_response()
+}
+
+// ===============================
 //   Reservation Router
 // ===============================
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
+        .route("/admin/list", get(admin_list_reservations))
         .route("/{id}/review", put(review_reservation))
         .route("/", get(get_reservations))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
