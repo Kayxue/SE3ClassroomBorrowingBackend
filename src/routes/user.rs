@@ -19,7 +19,7 @@ use crate::{
     AppState,
     argon_hasher::{hash, verify},
     entities::{sea_orm_active_enums::Role, user},
-    login_system::{AuthBackend, AuthSession, Credentials},
+    login_system::{AuthBackend, AuthSession, Credentials}, utils::check_student_id,
 };
 
 use nanoid::nanoid;
@@ -31,6 +31,7 @@ pub struct RegisterBody {
     password: String,
     phone_number: String,
     name: String,
+    student_id: String,
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -102,7 +103,13 @@ pub async fn register(
         password,
         phone_number,
         name,
+        student_id
     } = body;
+
+    if !check_student_id(&student_id) {
+        return (StatusCode::BAD_REQUEST, "Invalid student ID").into_response();
+    }
+    
     let hashed_password = hash(password).await.unwrap();
 
     let new_user = user::ActiveModel {
