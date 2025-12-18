@@ -8,3 +8,4 @@ pub use super::key::Entity as Key;
 pub use super::key_transaction_log::Entity as KeyTransactionLog;
 pub use super::reservation::Entity as Reservation;
 pub use super::user::Entity as User;
+pub use super::password_reset::Entity as PasswordReset;

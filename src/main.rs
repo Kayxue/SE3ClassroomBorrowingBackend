@@ -110,6 +110,42 @@ impl utoipa::Modify for SecurityAddon {
 #[derive(OpenApi)]
 #[openapi(
     tags(
+        (name = "Blacklist", description = "Blacklist endpoints")
+    ),
+    paths(
+        routes::black_list::create_black_list,
+        routes::black_list::update_black_list,
+        routes::black_list::list_black_list,
+        routes::black_list::get_black_list,
+        routes::black_list::delete_black_list,
+    ),
+    components(schemas(
+        entities::black_list::Model,
+        routes::black_list::UpdateBlackListBody,
+    ))
+)]
+struct BlacklistApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
+        (name = "Password Reset", description = "Password reset endpoints")
+    ),
+    paths(
+        routes::password::forgot_password,
+        routes::password::verify_code,
+        routes::password::reset_password,
+    ),
+    components(schemas(
+        //entities::password_reset::Model,
+        routes::password::ResetPasswordBody,
+    ))
+)]
+struct PasswordApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
         (name = "Infraction", description = "Infraction endpoints")
     ),
     paths(
@@ -255,7 +291,7 @@ struct ClassroomApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi), (path = "/announcement", api = AnnouncementApi), (path = "/infraction", api = InfractionApi)),
+    nest((path = "/user", api = UserApi), (path = "/classroom", api = ClassroomApi), (path = "/reservation", api = ReservationApi), (path = "/key", api = KeyApi), (path = "/announcement", api = AnnouncementApi), (path = "/infraction", api = InfractionApi), (path = "/black_list", api = BlacklistApi), (path = "/password", api = PasswordApi) ),
     tags((name = "Root", description = "Root endpoints")),
     paths(
         root,
@@ -299,6 +335,10 @@ struct ClassroomApi;
             routes::infraction::CreateInfractionBody,
             routes::infraction::UpdateInfractionBody,
             entities::infraction::Model,
+            routes::black_list::UpdateBlackListBody,
+            entities::black_list::Model,
+            //entities::password_reset::Model,
+            routes::password::ResetPasswordBody,
         )
     )
 )]
