@@ -169,8 +169,8 @@ mod tests {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
         
-        // Test various student numbers (00-99)
-        let numbers = vec!["00", "01", "10", "25", "50", "75", "99"];
+        // Test various student numbers (01-99)
+        let numbers = vec!["01", "10", "25", "50", "75", "99"];
         for num in numbers {
             let valid_id = format!("0{}1E0{}", valid_year, num);
             assert!(check_student_id(&valid_id), "Failed for number: {}", num);
@@ -193,6 +193,15 @@ mod tests {
         
         assert!(!check_student_id(&format!("0{}1E0-1", valid_year)));
         assert!(!check_student_id(&format!("0{}1E0_1", valid_year)));
+    }
+
+    #[test]
+    fn test_invalid_number_zero() {
+        let current_year = Local::now().year() - 1911;
+        let valid_year = format!("{:02}", current_year % 100);
+        
+        // Number must be between 1 and 99, so "00" is invalid
+        assert!(!check_student_id(&format!("0{}1E000", valid_year)));
     }
 
     #[test]
@@ -220,7 +229,7 @@ mod tests {
             format!("0{}00001", valid_year),
             format!("0{}AB099", valid_year),
             format!("0{}FF150", valid_year),
-            format!("0{}12000", valid_year),
+            format!("0{}12001", valid_year),
         ];
         
         for id in valid_ids {

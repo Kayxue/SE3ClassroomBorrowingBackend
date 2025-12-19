@@ -6,7 +6,7 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
     if chars.len() != 8 {
         return false;
     }
-    let current_year = Local::now().year() - 1911;
+    let current_year = (Local::now().year() - 1911) as u8;
     let first_char = chars[0];
     let year = &chars[1..=2];
     let department = &chars[3..=4];
@@ -15,21 +15,32 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
     if first_char != '0' {
         return false;
     }
-    if let Ok(year_parsed) = year.iter().collect::<String>().parse::<i32>() {
-        if year_parsed < 0 || year_parsed > (current_year % 100) {
-            return false;
-        }
-    } else {
-        return false;
+    match year.iter().collect::<String>().parse::<u8>() {
+        Ok(year_parsed) => {
+            if year_parsed > (current_year % 100) {
+                return false;
+            }
+        },
+        Err(_) => return false,
     }
     if let Err(_) = u8::from_str_radix(&department.iter().collect::<String>(), 16) {
         return false;
     }
-    if class.is_none() || class.unwrap() > 1 {
-        return false;
+    match class {
+        Some(class) => {
+            if class > 1 {
+                return false;
+            }
+        },
+        None => return false,
     }
-    if u8::from_str_radix(&number.iter().collect::<String>(), 10).is_err() {
-        return false;
+    match u8::from_str_radix(&number.iter().collect::<String>(), 10) {
+        Ok(number) => {
+            if number > 99 || number < 1 {
+                return false;
+            }
+        },
+        Err(_) => return false,
     }
     return true;
 }
