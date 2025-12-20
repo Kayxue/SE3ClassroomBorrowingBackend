@@ -68,15 +68,6 @@ impl From<key::Model> for KeyResponse {
 }
 
 
-#[derive(Deserialize, ToSchema)]
-pub struct KeyLogListQuery {
-    pub reservation_id: Option<String>,
-    pub returned: Option<bool>,
-    pub page: Option<u64>,
-    pub page_size: Option<u64>,
-    pub sort: Option<String>, 
-}
-
 #[derive(Serialize, ToSchema)]
 pub struct KeyTransactionLogResponse {
     pub id: String,
@@ -102,10 +93,21 @@ impl From<key_transaction_log::Model> for KeyTransactionLogResponse {
             borrowed_at: m.borrowed_at.to_string(),
             deadline: m.deadline.to_string(),
             returned_at: m.returned_at.map(|t| t.to_string()),
-            on_time: m.on_time,
+            on_time: Some(m.on_time),
             created_at: m.created_at.to_string(),
         }
     }
+}
+
+use utoipa::{ToSchema, IntoParams};
+
+#[derive(Deserialize, ToSchema, IntoParams)]
+pub struct KeyLogListQuery {
+    pub reservation_id: Option<String>,
+    pub returned: Option<bool>,
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+    pub sort: Option<String>,
 }
 
 
@@ -486,7 +488,6 @@ pub async fn list_key_logs_by_key(
     Path(id): Path<String>,
     Query(q): Query<KeyLogListQuery>,
 ) -> impl IntoResponse {
-    // 確認 key 存在（避免查不到還回空陣列造成誤解）
     match key::Entity::find_by_id(&id).one(&state.db).await {
         Ok(Some(_)) => {}
         Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
