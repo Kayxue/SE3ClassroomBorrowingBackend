@@ -1,19 +1,20 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, post, put},
+    routing::{delete, get, post, put},
 };
 use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
-    ColumnTrait, EntityTrait, ModelTrait, QueryFilter,
+    ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, PaginatorTrait,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use sea_orm::{QuerySelect, Condition};
 
 use crate::{
     AppState,
@@ -65,6 +66,48 @@ impl From<key::Model> for KeyResponse {
         }
     }
 }
+
+
+#[derive(Deserialize, ToSchema)]
+pub struct KeyLogListQuery {
+    pub reservation_id: Option<String>,
+    pub returned: Option<bool>,
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+    pub sort: Option<String>, 
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct KeyTransactionLogResponse {
+    pub id: String,
+    pub reservation_id: Option<String>,
+    pub key_id: Option<String>,
+    pub borrowed_to: Option<String>,
+    pub handled_by: Option<String>,
+    pub borrowed_at: String,
+    pub deadline: String,
+    pub returned_at: Option<String>,
+    pub on_time: Option<bool>,
+    pub created_at: String,
+}
+
+impl From<key_transaction_log::Model> for KeyTransactionLogResponse {
+    fn from(m: key_transaction_log::Model) -> Self {
+        Self {
+            id: m.id,
+            reservation_id: m.reservation_id,
+            key_id: m.key_id,
+            borrowed_to: m.borrowed_to,
+            handled_by: m.handled_by,
+            borrowed_at: m.borrowed_at.to_string(),
+            deadline: m.deadline.to_string(),
+            returned_at: m.returned_at.map(|t| t.to_string()),
+            on_time: m.on_time,
+            created_at: m.created_at.to_string(),
+        }
+    }
+}
+
 
 #[utoipa::path(
     post,
@@ -368,11 +411,133 @@ pub async fn return_key(
     }
 }
 
+#[utoipa::path(
+    get,
+    tags = ["Key"],
+    description = "List key borrow/return transaction logs (admin)",
+    path = "/logs",
+    params(
+        KeyLogListQuery
+    ),
+    responses(
+        (status = 200, description = "Logs fetched successfully", body = Vec<KeyTransactionLogResponse>),
+        (status = 500, description = "Failed to fetch logs")
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn list_key_logs(
+    State(state): State<AppState>,
+    Query(q): Query<KeyLogListQuery>,
+) -> impl IntoResponse {
+    let mut stmt = key_transaction_log::Entity::find();
+
+    if let Some(reservation_id) = &q.reservation_id {
+        stmt = stmt.filter(key_transaction_log::Column::ReservationId.eq(reservation_id));
+    }
+
+    if let Some(returned) = q.returned {
+        if returned {
+            stmt = stmt.filter(key_transaction_log::Column::ReturnedAt.is_not_null());
+        } else {
+            stmt = stmt.filter(key_transaction_log::Column::ReturnedAt.is_null());
+        }
+    }
+
+    // sort
+    let sort_desc = q.sort.as_deref().unwrap_or("desc").eq_ignore_ascii_case("desc");
+    stmt = if sort_desc {
+        stmt.order_by_desc(key_transaction_log::Column::BorrowedAt)
+    } else {
+        stmt.order_by_asc(key_transaction_log::Column::BorrowedAt)
+    };
+
+    // pagination
+    let page = q.page.unwrap_or(1).max(1);
+    let page_size = q.page_size.unwrap_or(20).clamp(1, 200);
+
+    let paginator = stmt.paginate(&state.db, page_size);
+    let models = match paginator.fetch_page(page - 1).await {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch logs").into_response(),
+    };
+
+    let resp: Vec<KeyTransactionLogResponse> = models.into_iter().map(Into::into).collect();
+    (StatusCode::OK, Json(resp)).into_response()
+}
+
+#[utoipa::path(
+    get,
+    tags = ["Key"],
+    description = "List transaction logs for a specific key (admin)",
+    path = "/{id}/logs",
+    params(
+        ("id" = String, Path, description = "Key ID"),
+        KeyLogListQuery
+    ),
+    responses(
+        (status = 200, description = "Logs fetched successfully", body = Vec<KeyTransactionLogResponse>),
+        (status = 404, description = "Key not found"),
+        (status = 500, description = "Failed to fetch logs")
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn list_key_logs_by_key(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<KeyLogListQuery>,
+) -> impl IntoResponse {
+    // 確認 key 存在（避免查不到還回空陣列造成誤解）
+    match key::Entity::find_by_id(&id).one(&state.db).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query key").into_response(),
+    }
+
+    let mut stmt = key_transaction_log::Entity::find()
+        .filter(key_transaction_log::Column::KeyId.eq(id.clone()));
+
+    if let Some(reservation_id) = &q.reservation_id {
+        stmt = stmt.filter(key_transaction_log::Column::ReservationId.eq(reservation_id));
+    }
+
+    if let Some(returned) = q.returned {
+        if returned {
+            stmt = stmt.filter(key_transaction_log::Column::ReturnedAt.is_not_null());
+        } else {
+            stmt = stmt.filter(key_transaction_log::Column::ReturnedAt.is_null());
+        }
+    }
+
+    let sort_desc = q.sort.as_deref().unwrap_or("desc").eq_ignore_ascii_case("desc");
+    stmt = if sort_desc {
+        stmt.order_by_desc(key_transaction_log::Column::BorrowedAt)
+    } else {
+        stmt.order_by_asc(key_transaction_log::Column::BorrowedAt)
+    };
+
+    let page = q.page.unwrap_or(1).max(1);
+    let page_size = q.page_size.unwrap_or(20).clamp(1, 200);
+
+    let paginator = stmt.paginate(&state.db, page_size);
+    let models = match paginator.fetch_page(page - 1).await {
+        Ok(v) => v,
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch logs").into_response();
+        }
+    };
+
+    let resp: Vec<KeyTransactionLogResponse> = models.into_iter().map(Into::into).collect();
+    (StatusCode::OK, Json(resp)).into_response()
+}
+
+
 pub fn key_router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_key))
+        .route("/logs", get(list_key_logs))
         .route("/{id}", put(update_key))
         .route("/{id}", delete(delete_key))
+        .route("/{id}/logs", get(list_key_logs_by_key))
         .route("/{id}/borrow", post(borrow_key))
         .route("/{id}/return", post(return_key))
         .route_layer(permission_required!(AuthBackend, Role::Admin))
