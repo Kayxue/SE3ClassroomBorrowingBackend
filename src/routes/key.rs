@@ -13,7 +13,7 @@ use sea_orm::{
     ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, PaginatorTrait,
 };
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{ToSchema, IntoParams};
 use sea_orm::{QuerySelect, Condition};
 
 use crate::{
@@ -99,7 +99,6 @@ impl From<key_transaction_log::Model> for KeyTransactionLogResponse {
     }
 }
 
-use utoipa::{ToSchema, IntoParams};
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct KeyLogListQuery {
