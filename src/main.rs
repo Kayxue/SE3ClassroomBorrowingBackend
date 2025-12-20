@@ -191,7 +191,9 @@ struct AnnouncementApi;
         routes::key::update_key,
         routes::key::delete_key,
         routes::key::borrow_key,
-        routes::key::return_key
+        routes::key::return_key,
+        routes::key::list_key_logs,
+        routes::key::list_key_logs_by_key
     ),
     components(schemas(
         entities::key::Model,
@@ -200,7 +202,9 @@ struct AnnouncementApi;
         routes::key::UpdateKeyBody,
         routes::key::KeyResponse,
         routes::key::BorrowKeyBody,
-        routes::key::ReturnKeyBody
+        routes::key::ReturnKeyBody,
+        routes::key::KeyLogListQuery,
+        routes::key::KeyTransactionLogResponse
     ))
 )]
 struct KeyApi;
