@@ -78,6 +78,7 @@ pub struct KeyTransactionLogResponse {
     pub borrowed_at: String,
     pub deadline: String,
     pub returned_at: Option<String>,
+    pub returned: bool,
     pub on_time: Option<bool>,
     pub created_at: String,
 }
@@ -93,6 +94,7 @@ impl From<key_transaction_log::Model> for KeyTransactionLogResponse {
             borrowed_at: m.borrowed_at.to_string(),
             deadline: m.deadline.to_string(),
             returned_at: m.returned_at.map(|t| t.to_string()),
+            returned, 
             on_time: Some(m.on_time),
             created_at: m.created_at.to_string(),
         }
@@ -349,7 +351,11 @@ pub async fn borrow_key(
     };
 
     match new_key_transaction_log.insert(&state.db).await {
-        Ok(_) => (StatusCode::OK, "Key borrowed successfully").into_response(),
+        Ok(model) => (
+            StatusCode::OK,
+            Json(KeyTransactionLogResponse::from(model)),
+        )
+            .into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to borrow key").into_response(),
     }
 }
@@ -407,7 +413,11 @@ pub async fn return_key(
         .unwrap_or_else(|| returned_at_parsed <= deadline));
 
     match key_transaction_log_active.update(&state.db).await {
-        Ok(_) => (StatusCode::OK, "Key returned successfully").into_response(),
+        Ok(model) => (
+            StatusCode::OK,
+            Json(KeyTransactionLogResponse::from(model)),
+        )
+            .into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to return key").into_response(),
     }
 }
