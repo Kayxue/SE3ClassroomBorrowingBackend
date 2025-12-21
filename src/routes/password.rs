@@ -28,7 +28,6 @@ const CODE_TTL_MINUTES: i64 = 10;
 const TOKEN_TTL_MINUTES: i64 = 15;
 
 fn gen_6_digit_code() -> String {
-    // 只用 0-9
     const DIGITS: [char; 10] = ['0','1','2','3','4','5','6','7','8','9'];
     nanoid!(6, &DIGITS)
 }
@@ -102,7 +101,7 @@ pub async fn forgot_password(
             code: Set(Some(code.clone())),
             code_expires_at: Set(Some(code_exp.into())),
             reset_token: Set(None),
-            token_expires_at: Set(None),
+            reset_token_expires_at: Set(None),
             created_at: NotSet,
             updated_at: NotSet,
         };
@@ -170,7 +169,7 @@ pub async fn verify_code(
     // 更新 record：發 token、清掉 code（避免重複驗證）
     let mut active: password_reset::ActiveModel = rec.into();
     active.reset_token = Set(Some(reset_token.clone()));
-    active.token_expires_at = Set(Some(token_exp.into()));
+    active.reset_token_expires_at = Set(Some(token_exp.into()));
     active.code = Set(None);
     active.code_expires_at = Set(None);
 
@@ -218,7 +217,7 @@ pub async fn reset_password(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query reset record").into_response(),
     };
 
-    let token_ok = match (rec.reset_token.clone(), rec.token_expires_at) {
+    let token_ok = match (rec.reset_token.clone(), rec.reset_token_expires_at) {
         (Some(saved), Some(exp)) => saved == token && exp > now_tz,
         _ => false,
     };
