@@ -85,6 +85,7 @@ pub struct KeyTransactionLogResponse {
 
 impl From<key_transaction_log::Model> for KeyTransactionLogResponse {
     fn from(m: key_transaction_log::Model) -> Self {
+        let returned = m.returned_at.is_some();
         Self {
             id: m.id,
             reservation_id: m.reservation_id,
