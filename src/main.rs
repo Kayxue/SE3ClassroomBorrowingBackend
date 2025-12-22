@@ -2,7 +2,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use axum_login::AuthManagerLayerBuilder;
@@ -92,6 +92,7 @@ async fn root() -> impl IntoResponse {
 #[derive(Clone)]
 struct AppState {
     db: DatabaseConnection,
+    redis: Arc<redis::Client>,
 }
 
 struct SecurityAddon;
@@ -403,6 +404,10 @@ async fn main() {
     let pool = Pool::new(redis_pool_config, None, None, None, 6).unwrap();
     let _ = pool.connect();
     pool.wait_for_connect().await.unwrap();
+
+    let redis_client = redis::Client::open(format!("redis://{}:{}", env::var("REDIS_IP").unwrap(), env::var("REDIS_PORT").unwrap())).unwrap();
+    let redis_client_arc = Arc::new(redis_client);
+
     let session_store = RedisStore::new(pool);
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
@@ -412,14 +417,14 @@ async fn main() {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(&database_url).await.unwrap();
 
-    let auth_backend = AuthBackend::new(db.clone());
+    let auth_backend = AuthBackend::new(db.clone(), redis_client_arc.clone());
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
 
     let image_service_ip = env::var("IMAGE_SERVICE_IP").expect("IMAGE_SERVICE_IP must be set");
     let image_service_api_key =
         env::var("IMAGE_SERVICE_API_KEY").expect("IMAGE_SERVICE_API_KEY must be set");
 
-    let app_state = AppState { db: db };
+    let app_state = AppState { db: db, redis: redis_client_arc };
 
     let app = Router::new()
         .route("/", get(root))

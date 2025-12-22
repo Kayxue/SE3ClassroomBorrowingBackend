@@ -1,4 +1,5 @@
 use chrono::{Datelike, Local};
+use redis::{SetExpiry, SetOptions};
 
 pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
     let id = student_id.as_ref();
@@ -43,4 +44,8 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
         Err(_) => return false,
     }
     return true;
+}
+
+pub fn get_redis_options() -> SetOptions {
+    SetOptions::default().with_expiration(SetExpiry::EX(30))
 }
