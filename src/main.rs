@@ -221,6 +221,7 @@ struct KeyApi;
         routes::reservation::get_reservations,
         routes::reservation::get_all_reservations_for_self,
         routes::reservation::admin_list_reservations,
+        routes::reservation::admin_get_reservation_by_id,
         routes::reservation::cancel_reservation,
         routes::reservation::get_self_reservations_filtered
     ),
