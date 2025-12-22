@@ -522,6 +522,40 @@ pub async fn cancel_reservation(
 }
 
 // ===============================
+//   get reservation by id
+// ===============================
+#[utoipa::path(
+    get,
+    tags = ["Reservation"],
+    description = "Admin: get reservation by id",
+    path = "/admin/{id}",
+    params(
+        ("id" = String, Path, description = "Reservation id")
+    ),
+    responses(
+        (status = 200, description = "Reservation found", body = reservation::Model),
+        (status = 404, description = "Reservation not found", body = String),
+        (status = 500, description = "Failed to fetch reservation", body = String),
+    ),
+    security(("session_cookie" = []))
+)]
+pub async fn admin_get_reservation_by_id(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match reservation::Entity::find_by_id(id).one(&state.db).await {
+        Ok(Some(model)) => (StatusCode::OK, Json(model)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch reservation",
+        )
+            .into_response(),
+    }
+}
+
+
+// ===============================
 //   SelfListQuery (NEW)
 // ===============================
 #[derive(Deserialize, ToSchema)]
@@ -718,6 +752,7 @@ pub async fn admin_list_reservations(
 pub fn reservation_router() -> Router<AppState> {
     let admin_only_route = Router::new()
         .route("/admin/list", get(admin_list_reservations))
+        .route("/admin/{id}", get(admin_get_reservation_by_id))
         .route("/{id}/review", put(review_reservation))
         .route("/", get(get_reservations))
         .route_layer(permission_required!(AuthBackend, Role::Admin));
