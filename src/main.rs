@@ -2,12 +2,13 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use axum::{Router, extract::Path, response::IntoResponse, routing::get};
 use axum_login::AuthManagerLayerBuilder;
 use dotenv::dotenv;
 use nanoid::nanoid;
+use redis::aio::MultiplexedConnection;
 use sea_orm::{Database, DatabaseConnection};
 use std::env;
 use tower::ServiceBuilder;
@@ -36,13 +37,13 @@ mod utils_test;
 use argon_hasher::hash;
 use login_system::AuthBackend;
 use routes::announcement::announcement_router;
+use routes::black_list::black_list_router;
 use routes::classroom::classroom_router;
 use routes::infraction::infraction_router;
 use routes::key::key_router;
+use routes::password::password_router;
 use routes::reservation::reservation_router;
 use routes::user::user_router;
-use routes::black_list::black_list_router;
-use routes::password::password_router;
 
 use crate::email_client::{EmailClientConfig, set_email_client_config};
 
@@ -92,7 +93,7 @@ async fn root() -> impl IntoResponse {
 #[derive(Clone)]
 struct AppState {
     db: DatabaseConnection,
-    redis: Arc<redis::Client>,
+    redis: MultiplexedConnection,
 }
 
 struct SecurityAddon;
@@ -405,8 +406,16 @@ async fn main() {
     let _ = pool.connect();
     pool.wait_for_connect().await.unwrap();
 
-    let redis_client = redis::Client::open(format!("redis://{}:{}", env::var("REDIS_IP").unwrap(), env::var("REDIS_PORT").unwrap())).unwrap();
-    let redis_client_arc = Arc::new(redis_client);
+    let redis_client = redis::Client::open(format!(
+        "redis://{}:{}",
+        env::var("REDIS_IP").unwrap(),
+        env::var("REDIS_PORT").unwrap()
+    ))
+    .unwrap();
+    let redis_connection = redis_client
+        .get_multiplexed_async_connection()
+        .await
+        .unwrap();
 
     let session_store = RedisStore::new(pool);
     let session_layer = SessionManagerLayer::new(session_store)
@@ -417,14 +426,17 @@ async fn main() {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(&database_url).await.unwrap();
 
-    let auth_backend = AuthBackend::new(db.clone(), redis_client_arc.clone());
+    let auth_backend = AuthBackend::new(db.clone(), redis_connection.clone());
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
 
     let image_service_ip = env::var("IMAGE_SERVICE_IP").expect("IMAGE_SERVICE_IP must be set");
     let image_service_api_key =
         env::var("IMAGE_SERVICE_API_KEY").expect("IMAGE_SERVICE_API_KEY must be set");
 
-    let app_state = AppState { db: db, redis: redis_client_arc };
+    let app_state = AppState {
+        db: db,
+        redis: redis_connection,
+    };
 
     let app = Router::new()
         .route("/", get(root))

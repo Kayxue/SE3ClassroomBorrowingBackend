@@ -10,11 +10,10 @@ use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
-    ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, PaginatorTrait,
+    ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder,
 };
 use serde::{Deserialize, Serialize};
-use utoipa::{ToSchema, IntoParams};
-use sea_orm::{QuerySelect, Condition};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
@@ -67,7 +66,6 @@ impl From<key::Model> for KeyResponse {
     }
 }
 
-
 #[derive(Serialize, ToSchema)]
 pub struct KeyTransactionLogResponse {
     pub id: String,
@@ -95,13 +93,12 @@ impl From<key_transaction_log::Model> for KeyTransactionLogResponse {
             borrowed_at: m.borrowed_at.to_string(),
             deadline: m.deadline.to_string(),
             returned_at: m.returned_at.map(|t| t.to_string()),
-            returned, 
+            returned,
             on_time: Some(m.on_time),
             created_at: m.created_at.to_string(),
         }
     }
 }
-
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct KeyLogListQuery {
@@ -111,7 +108,6 @@ pub struct KeyLogListQuery {
     pub page_size: Option<u64>,
     pub sort: Option<String>,
 }
-
 
 #[utoipa::path(
     post,
@@ -352,11 +348,7 @@ pub async fn borrow_key(
     };
 
     match new_key_transaction_log.insert(&state.db).await {
-        Ok(model) => (
-            StatusCode::OK,
-            Json(KeyTransactionLogResponse::from(model)),
-        )
-            .into_response(),
+        Ok(model) => (StatusCode::OK, Json(KeyTransactionLogResponse::from(model))).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to borrow key").into_response(),
     }
 }
@@ -414,11 +406,7 @@ pub async fn return_key(
         .unwrap_or_else(|| returned_at_parsed <= deadline));
 
     match key_transaction_log_active.update(&state.db).await {
-        Ok(model) => (
-            StatusCode::OK,
-            Json(KeyTransactionLogResponse::from(model)),
-        )
-            .into_response(),
+        Ok(model) => (StatusCode::OK, Json(KeyTransactionLogResponse::from(model))).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to return key").into_response(),
     }
 }
@@ -456,7 +444,11 @@ pub async fn list_key_logs(
     }
 
     // sort
-    let sort_desc = q.sort.as_deref().unwrap_or("desc").eq_ignore_ascii_case("desc");
+    let sort_desc = q
+        .sort
+        .as_deref()
+        .unwrap_or("desc")
+        .eq_ignore_ascii_case("desc");
     stmt = if sort_desc {
         stmt.order_by_desc(key_transaction_log::Column::BorrowedAt)
     } else {
@@ -470,7 +462,9 @@ pub async fn list_key_logs(
     let paginator = stmt.paginate(&state.db, page_size);
     let models = match paginator.fetch_page(page - 1).await {
         Ok(v) => v,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch logs").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch logs").into_response();
+        }
     };
 
     let resp: Vec<KeyTransactionLogResponse> = models.into_iter().map(Into::into).collect();
@@ -501,7 +495,9 @@ pub async fn list_key_logs_by_key(
     match key::Entity::find_by_id(&id).one(&state.db).await {
         Ok(Some(_)) => {}
         Ok(None) => return (StatusCode::NOT_FOUND, "Key not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query key").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query key").into_response();
+        }
     }
 
     let mut stmt = key_transaction_log::Entity::find()
@@ -519,7 +515,11 @@ pub async fn list_key_logs_by_key(
         }
     }
 
-    let sort_desc = q.sort.as_deref().unwrap_or("desc").eq_ignore_ascii_case("desc");
+    let sort_desc = q
+        .sort
+        .as_deref()
+        .unwrap_or("desc")
+        .eq_ignore_ascii_case("desc");
     stmt = if sort_desc {
         stmt.order_by_desc(key_transaction_log::Column::BorrowedAt)
     } else {
@@ -540,7 +540,6 @@ pub async fn list_key_logs_by_key(
     let resp: Vec<KeyTransactionLogResponse> = models.into_iter().map(Into::into).collect();
     (StatusCode::OK, Json(resp)).into_response()
 }
-
 
 pub fn key_router() -> Router<AppState> {
     Router::new()

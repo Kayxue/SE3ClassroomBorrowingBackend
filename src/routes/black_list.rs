@@ -1,27 +1,23 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use axum_login::permission_required;
 use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
-    EntityTrait,
-    ModelTrait,
+    EntityTrait, ModelTrait,
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
     AppState,
-    entities::{
-        black_list,
-        sea_orm_active_enums::Role,
-    },
+    entities::{black_list, sea_orm_active_enums::Role},
     login_system::{AuthBackend, AuthSession},
 };
 

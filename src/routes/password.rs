@@ -1,25 +1,16 @@
-use axum::{
-    Json, Router,
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::post,
-};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use chrono::{Duration, Utc};
 use nanoid::nanoid;
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
-    ColumnTrait,
-    EntityTrait,
-    QueryFilter,
+    ColumnTrait, EntityTrait, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    AppState,
-    argon_hasher,
+    AppState, argon_hasher,
     email_client::send_email,
     entities::{password_reset, user},
 };
@@ -28,7 +19,7 @@ const CODE_TTL_MINUTES: i64 = 10;
 const TOKEN_TTL_MINUTES: i64 = 15;
 
 fn gen_6_digit_code() -> String {
-    const DIGITS: [char; 10] = ['0','1','2','3','4','5','6','7','8','9'];
+    const DIGITS: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
     nanoid!(6, &DIGITS)
 }
 
@@ -81,7 +72,9 @@ pub async fn forgot_password(
     {
         Ok(Some(_)) => true,
         Ok(None) => false,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query user").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query user").into_response();
+        }
     };
 
     if exists {
@@ -107,7 +100,11 @@ pub async fn forgot_password(
         };
 
         if record.insert(&state.db).await.is_err() {
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create reset record").into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create reset record",
+            )
+                .into_response();
         }
 
         let subject = "Password Reset Verification Code";
@@ -120,7 +117,11 @@ pub async fn forgot_password(
         }
     }
 
-    (StatusCode::OK, "If the email exists, a reset code has been sent.").into_response()
+    (
+        StatusCode::OK,
+        "If the email exists, a reset code has been sent.",
+    )
+        .into_response()
 }
 
 #[utoipa::path(
@@ -151,7 +152,13 @@ pub async fn verify_code(
     {
         Ok(Some(r)) => r,
         Ok(None) => return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query reset record").into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to query reset record",
+            )
+                .into_response();
+        }
     };
 
     let code_ok = match (rec.code.clone(), rec.code_expires_at) {
@@ -174,7 +181,11 @@ pub async fn verify_code(
     active.code_expires_at = Set(None);
 
     if active.update(&state.db).await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update reset record").into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update reset record",
+        )
+            .into_response();
     }
 
     (StatusCode::OK, Json(VerifyCodeResponse { reset_token })).into_response()
@@ -201,7 +212,11 @@ pub async fn reset_password(
     let token = body.reset_token.trim().to_string();
 
     if body.new_password != body.confirm {
-        return (StatusCode::BAD_REQUEST, "New password and confirm password are not same").into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            "New password and confirm password are not same",
+        )
+            .into_response();
     }
 
     let now = Utc::now();
@@ -213,8 +228,16 @@ pub async fn reset_password(
         .await
     {
         Ok(Some(r)) => r,
-        Ok(None) => return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query reset record").into_response(),
+        Ok(None) => {
+            return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to query reset record",
+            )
+                .into_response();
+        }
     };
 
     let token_ok = match (rec.reset_token.clone(), rec.reset_token_expires_at) {
@@ -234,20 +257,28 @@ pub async fn reset_password(
     {
         Ok(Some(u)) => u,
         Ok(None) => return (StatusCode::NOT_FOUND, "User not found").into_response(),
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query user").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query user").into_response();
+        }
     };
 
     // 更新密碼
     let new_hash = match argon_hasher::hash(body.new_password.as_bytes()).await {
         Ok(h) => h,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to hash password").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to hash password").into_response();
+        }
     };
 
     let mut ua: user::ActiveModel = u.into();
     ua.password = Set(new_hash);
 
     if ua.update(&state.db).await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update password").into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update password",
+        )
+            .into_response();
     }
 
     // 重置成功：刪掉 reset record

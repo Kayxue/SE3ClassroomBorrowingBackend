@@ -21,7 +21,7 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
             if year_parsed > (current_year % 100) {
                 return false;
             }
-        },
+        }
         Err(_) => return false,
     }
     if let Err(_) = u8::from_str_radix(&department.iter().collect::<String>(), 16) {
@@ -32,7 +32,7 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
             if class > 1 {
                 return false;
             }
-        },
+        }
         None => return false,
     }
     match u8::from_str_radix(&number.iter().collect::<String>(), 10) {
@@ -40,7 +40,7 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
             if number > 99 || number < 1 {
                 return false;
             }
-        },
+        }
         Err(_) => return false,
     }
     return true;

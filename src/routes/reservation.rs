@@ -6,11 +6,14 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use axum_login::{login_required, permission_required};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, PaginatorTrait};
+use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait,
+    QueryFilter, QueryOrder,
+};
 use serde::{Deserialize, Serialize};
 use string_builder::Builder;
 use utoipa::ToSchema;
-use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
 
 use crate::{
     AppState,
@@ -35,9 +38,9 @@ pub struct AdminListQuery {
     pub user_id: Option<String>,
     pub from: Option<String>,
     pub to: Option<String>,
-    pub sort: Option<String>,      // asc|desc (default desc)
-    pub page: Option<u64>,         // default 1
-    pub page_size: Option<u64>,    // default 20, max 100
+    pub sort: Option<String>,   // asc|desc (default desc)
+    pub page: Option<u64>,      // default 1
+    pub page_size: Option<u64>, // default 20, max 100
 }
 
 // ===============================
@@ -554,7 +557,6 @@ pub async fn admin_get_reservation_by_id(
     }
 }
 
-
 // ===============================
 //   SelfListQuery (NEW)
 // ===============================
@@ -597,8 +599,8 @@ pub async fn get_self_reservations_filtered(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
 
-    let mut find_query = reservation::Entity::find()
-        .filter(reservation::Column::UserId.eq(Some(user.id)));
+    let mut find_query =
+        reservation::Entity::find().filter(reservation::Column::UserId.eq(Some(user.id)));
 
     if let Some(status) = query.status {
         find_query = find_query.filter(reservation::Column::Status.eq(status));
@@ -626,13 +628,19 @@ pub async fn get_self_reservations_filtered(
 
     match query.sort.as_deref() {
         Some("asc") => find_query = find_query.order_by_asc(reservation::Column::StartTime),
-        Some("desc") | None => find_query = find_query.order_by_desc(reservation::Column::StartTime),
+        Some("desc") | None => {
+            find_query = find_query.order_by_desc(reservation::Column::StartTime)
+        }
         Some(_) => return (StatusCode::BAD_REQUEST, "Invalid 'sort'").into_response(),
     }
 
     match find_query.all(&state.db).await {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch reservations").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch reservations",
+        )
+            .into_response(),
     }
 }
 
@@ -715,7 +723,9 @@ pub async fn admin_list_reservations(
     // sorting
     match query.sort.as_deref() {
         Some("asc") => find_query = find_query.order_by_asc(reservation::Column::StartTime),
-        Some("desc") | None => find_query = find_query.order_by_desc(reservation::Column::StartTime),
+        Some("desc") | None => {
+            find_query = find_query.order_by_desc(reservation::Column::StartTime)
+        }
         Some(_) => return (StatusCode::BAD_REQUEST, "Invalid 'sort'").into_response(),
     }
 

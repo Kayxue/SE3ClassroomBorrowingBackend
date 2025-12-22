@@ -8,7 +8,7 @@ pub mod classroom;
 pub mod infraction;
 pub mod key;
 pub mod key_transaction_log;
+pub mod password_reset;
 pub mod reservation;
 pub mod sea_orm_active_enums;
 pub mod user;
-pub mod password_reset;

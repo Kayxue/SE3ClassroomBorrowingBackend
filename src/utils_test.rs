@@ -69,12 +69,16 @@ mod tests {
     fn test_valid_department_hex_lowercase() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Test various hex department codes (lowercase)
         let departments = vec!["1a", "2b", "3c", "4d", "5e", "6f", "ab", "cd", "ef"];
         for dept in departments {
             let valid_id = format!("0{}{}001", valid_year, dept);
-            assert!(check_student_id(&valid_id), "Failed for department: {}", dept);
+            assert!(
+                check_student_id(&valid_id),
+                "Failed for department: {}",
+                dept
+            );
         }
     }
 
@@ -82,12 +86,16 @@ mod tests {
     fn test_valid_department_hex_uppercase() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Test various hex department codes (uppercase)
         let departments = vec!["1A", "2B", "3C", "4D", "5E", "6F", "AB", "CD", "EF"];
         for dept in departments {
             let valid_id = format!("0{}{}001", valid_year, dept);
-            assert!(check_student_id(&valid_id), "Failed for department: {}", dept);
+            assert!(
+                check_student_id(&valid_id),
+                "Failed for department: {}",
+                dept
+            );
         }
     }
 
@@ -95,12 +103,18 @@ mod tests {
     fn test_valid_department_numeric() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Test numeric department codes
-        let departments = vec!["00", "01", "12", "23", "34", "45", "56", "67", "78", "89", "99"];
+        let departments = vec![
+            "00", "01", "12", "23", "34", "45", "56", "67", "78", "89", "99",
+        ];
         for dept in departments {
             let valid_id = format!("0{}{}001", valid_year, dept);
-            assert!(check_student_id(&valid_id), "Failed for department: {}", dept);
+            assert!(
+                check_student_id(&valid_id),
+                "Failed for department: {}",
+                dept
+            );
         }
     }
 
@@ -108,7 +122,7 @@ mod tests {
     fn test_invalid_department_non_hex() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // G is not a valid hex character
         let invalid_id = format!("0{}1G001", valid_year);
         assert!(!check_student_id(&invalid_id));
@@ -118,7 +132,7 @@ mod tests {
     fn test_invalid_department_special_chars() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         assert!(!check_student_id(&format!("0{}1-001", valid_year)));
         assert!(!check_student_id(&format!("0{}1_001", valid_year)));
         assert!(!check_student_id(&format!("0{}1@001", valid_year)));
@@ -168,7 +182,7 @@ mod tests {
     fn test_valid_number_range() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Test various student numbers (01-99)
         let numbers = vec!["01", "10", "25", "50", "75", "99"];
         for num in numbers {
@@ -181,7 +195,7 @@ mod tests {
     fn test_invalid_number_non_numeric() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         assert!(!check_student_id(&format!("0{}1E0AB", valid_year)));
         assert!(!check_student_id(&format!("0{}1E0XY", valid_year)));
     }
@@ -190,7 +204,7 @@ mod tests {
     fn test_invalid_number_special_chars() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         assert!(!check_student_id(&format!("0{}1E0-1", valid_year)));
         assert!(!check_student_id(&format!("0{}1E0_1", valid_year)));
     }
@@ -199,7 +213,7 @@ mod tests {
     fn test_invalid_number_zero() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Number must be between 1 and 99, so "00" is invalid
         assert!(!check_student_id(&format!("0{}1E000", valid_year)));
     }
@@ -223,7 +237,7 @@ mod tests {
     fn test_complete_valid_examples() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Test complete valid student IDs
         let valid_ids = vec![
             format!("0{}00001", valid_year),
@@ -231,7 +245,7 @@ mod tests {
             format!("0{}FF150", valid_year),
             format!("0{}12001", valid_year),
         ];
-        
+
         for id in valid_ids {
             assert!(check_student_id(&id), "Failed for ID: {}", id);
         }
@@ -254,7 +268,7 @@ mod tests {
     fn test_case_sensitivity_of_hex() {
         let current_year = Local::now().year() - 1911;
         let valid_year = format!("{:02}", current_year % 100);
-        
+
         // Both lowercase and uppercase hex should be valid
         assert!(check_student_id(&format!("0{}ab001", valid_year)));
         assert!(check_student_id(&format!("0{}AB001", valid_year)));
