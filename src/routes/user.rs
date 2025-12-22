@@ -128,18 +128,16 @@ pub async fn register(
 
     match new_user.insert(&state.db).await {
         Ok(user) => {
-            let mut redis_client = state
-                .redis
-                .get_multiplexed_async_connection()
-                .await
-                .unwrap();
-            let _: Result<(), _> = redis_client
-                .set_options(
-                    format!("user_{}", user.id),
-                    serde_json::to_string(&user).unwrap(),
-                    get_redis_options(),
-                )
-                .await;
+            // Cache the new user (ignore errors - caching is best effort)
+            if let Ok(mut redis_client) = state.redis.get_multiplexed_async_connection().await {
+                let _: Result<(), _> = redis_client
+                    .set_options(
+                        format!("user_{}", user.id),
+                        serde_json::to_string(&user).unwrap(),
+                        get_redis_options(),
+                    )
+                    .await;
+            }
 
             let user_response = UserResponse::from(user);
             (StatusCode::CREATED, Json(user_response)).into_response()
@@ -230,20 +228,30 @@ async fn profile(session: AuthSession) -> impl IntoResponse {
     )
 )]
 pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let mut redis_client = state
-        .redis
-        .get_multiplexed_async_connection()
-        .await
-        .unwrap();
-    let user: Option<String> = redis_client.get(format!("user_{}", id)).await.unwrap();
-    if let Some(user) = user {
-        let user: entities::user::Model = serde_json::from_str(&user).unwrap();
-        let user_response = UserResponse::from(user);
-        return (StatusCode::OK, Json(user_response)).into_response();
+    // Try to get from cache first
+    if let Ok(mut redis_client) = state.redis.get_multiplexed_async_connection().await {
+        let user: Option<String> = redis_client.get(format!("user_{}", id)).await.unwrap_or(None);
+        if let Some(user_str) = user {
+            if let Ok(user) = serde_json::from_str::<entities::user::Model>(&user_str) {
+                let user_response = UserResponse::from(user);
+                return (StatusCode::OK, Json(user_response)).into_response();
+            }
+        }
     }
 
-    match user::Entity::find_by_id(id).one(&state.db).await {
+    // Fallback to database
+    match user::Entity::find_by_id(id.clone()).one(&state.db).await {
         Ok(Some(user)) => {
+            // Cache the result for future requests
+            if let Ok(mut redis_client) = state.redis.get_multiplexed_async_connection().await {
+                let _: Result<(), _> = redis_client
+                    .set_options(
+                        format!("user_{}", user.id),
+                        serde_json::to_string(&user).unwrap(),
+                        get_redis_options(),
+                    )
+                    .await;
+            }
             let user_response = UserResponse::from(user);
             (StatusCode::OK, Json(user_response)).into_response()
         }
@@ -295,18 +303,16 @@ pub async fn update_password(
     new_user.password = Set(new_hashed_password);
     match new_user.update(&state.db).await {
         Ok(updated_user) => {
-            let mut redis_client = state
-                .redis
-                .get_multiplexed_async_connection()
-                .await
-                .unwrap();
-            let _: Result<(), _> = redis_client
-                .set_options(
-                    format!("user_{}", updated_user.id),
-                    serde_json::to_string(&updated_user).unwrap(),
-                    get_redis_options(),
-                )
-                .await;
+            // Update cache (ignore errors - caching is best effort)
+            if let Ok(mut redis_client) = state.redis.get_multiplexed_async_connection().await {
+                let _: Result<(), _> = redis_client
+                    .set_options(
+                        format!("user_{}", updated_user.id),
+                        serde_json::to_string(&updated_user).unwrap(),
+                        get_redis_options(),
+                    )
+                    .await;
+            }
             (StatusCode::OK, "Password updated successfully")
         }
         Err(_) => (
@@ -361,18 +367,16 @@ pub async fn update_profile(
 
     match new_user.update(&state.db).await {
         Ok(updated_user) => {
-            let mut redis_client = state
-                .redis
-                .get_multiplexed_async_connection()
-                .await
-                .unwrap();
-            let _: Result<(), _> = redis_client
-                .set_options(
-                    format!("user_{}", updated_user.id),
-                    serde_json::to_string(&updated_user).unwrap(),
-                    get_redis_options(),
-                )
-                .await;
+            // Update cache (ignore errors - caching is best effort)
+            if let Ok(mut redis_client) = state.redis.get_multiplexed_async_connection().await {
+                let _: Result<(), _> = redis_client
+                    .set_options(
+                        format!("user_{}", updated_user.id),
+                        serde_json::to_string(&updated_user).unwrap(),
+                        get_redis_options(),
+                    )
+                    .await;
+            }
             let user_response = UserResponse::from(updated_user);
             (StatusCode::OK, Json(user_response)).into_response()
         }

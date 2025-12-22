@@ -59,14 +59,16 @@ impl AuthnBackend for AuthBackend {
 
         if let Some(ref user) = user {
             if verify(password.as_bytes(), &user.password).await.is_ok() {
-                let mut redis_client = self.redis.get_multiplexed_async_connection().await.unwrap();
-                let _: Result<(), _> = redis_client
-                    .set_options(
-                        format!("user_{}", user.id),
-                        serde_json::to_string(user).unwrap(),
-                        get_redis_options(),
-                    )
-                    .await;
+                // Cache user on successful login (ignore errors - caching is best effort)
+                if let Ok(mut redis_client) = self.redis.get_multiplexed_async_connection().await {
+                    let _: Result<(), _> = redis_client
+                        .set_options(
+                            format!("user_{}", user.id),
+                            serde_json::to_string(user).unwrap(),
+                            get_redis_options(),
+                        )
+                        .await;
+                }
                 return Ok(Some(user.clone()));
             }
         }
@@ -74,27 +76,33 @@ impl AuthnBackend for AuthBackend {
     }
 
     async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
-        let mut redis_client = self.redis.get_multiplexed_async_connection().await.unwrap();
-
-        let user: Option<String> = redis_client
-            .get(format!("user_{}", user_id.to_owned()))
-            .await
-            .unwrap();
-
-        if let Some(user) = user {
-            let user: entities::user::Model = serde_json::from_str(&user).unwrap();
-            return Ok(Some(user));
+        // Try to get from cache first
+        if let Ok(mut redis_client) = self.redis.get_multiplexed_async_connection().await {
+            let user: Option<String> = redis_client
+                .get(format!("user_{}", user_id.to_owned()))
+                .await
+                .unwrap_or(None);
+            if let Some(user_str) = user {
+                if let Ok(user) = serde_json::from_str::<entities::user::Model>(&user_str) {
+                    return Ok(Some(user));
+                }
+            }
         }
 
+        // Fallback to database
         let user = User::find_by_id(user_id.to_owned()).one(&self.db).await?;
+        
+        // Cache the result for future requests (ignore errors - caching is best effort)
         if let Some(user) = &user {
-            let _: Result<(), _> = redis_client
-                .set_options(
-                    format!("user_{}", user_id.to_owned()),
-                    serde_json::to_string(user).unwrap(),
-                    get_redis_options(),
-                )
-                .await;
+            if let Ok(mut redis_client) = self.redis.get_multiplexed_async_connection().await {
+                let _: Result<(), _> = redis_client
+                    .set_options(
+                        format!("user_{}", user_id.to_owned()),
+                        serde_json::to_string(user).unwrap(),
+                        get_redis_options(),
+                    )
+                    .await;
+            }
         }
         Ok(user)
     }
