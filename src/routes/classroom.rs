@@ -16,6 +16,7 @@ use axum::{
 use axum_login::permission_required;
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use nanoid::nanoid;
+use redis::AsyncCommands;
 use reqwest::multipart::Part;
 use reqwest::{Client, multipart};
 use sea_orm::ModelTrait;
@@ -25,9 +26,29 @@ use sea_orm::{
     EntityTrait,
 };
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use utoipa::ToSchema;
 
-use crate::AppState;
+use crate::{AppState, utils::{get_redis_options, REDIS_EXPIRY}};
+
+// Redis cache key helpers
+fn classroom_key(id: &str) -> String {
+    format!("classroom_{}", id)
+}
+
+fn classroom_with_keys_key(id: &str) -> String {
+    format!("classroom_{}_keys", id)
+}
+
+fn classroom_with_reservations_key(id: &str) -> String {
+    format!("classroom_{}_reservations", id)
+}
+
+fn classroom_with_keys_and_reservations_key(id: &str) -> String {
+    format!("classroom_{}_keys_reservations", id)
+}
+
+const CLASSROOMS_LIST_KEY: &str = "classrooms:list";
 
 static IMAGE_SERVICE_API_KEY: OnceLock<String> = OnceLock::new();
 static IMAGE_SERVICE_IP: OnceLock<String> = OnceLock::new();
@@ -163,7 +184,24 @@ pub async fn create_classroom(
     };
 
     match new_classroom.insert(&state.db).await {
-        Ok(classroom) => (StatusCode::CREATED, Json(classroom)).into_response(),
+        Ok(classroom) => {
+            // Cache the new classroom
+            let mut redis = state.redis.clone();
+            let result: Result<(), redis::RedisError> = redis
+                .set_options(
+                    classroom_key(&classroom.id),
+                    serde_json::to_string(&classroom).unwrap(),
+                    get_redis_options(),
+                )
+                .await;
+            if let Err(e) = result {
+                warn!("Failed to cache classroom {} in Redis: {}", classroom.id, e);
+            }
+            // Invalidate classrooms list cache
+            let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
+            
+            (StatusCode::CREATED, Json(classroom)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to create classroom",
@@ -183,8 +221,43 @@ pub async fn create_classroom(
     )
 )]
 pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
+    // Clone connection once for this handler
+    let mut redis = state.redis.clone();
+    
+    // Try to get from cache first
+    let cached_classrooms: Option<String> = match redis
+        .get_ex(CLASSROOMS_LIST_KEY, REDIS_EXPIRY)
+        .await
+    {
+        Ok(classrooms) => classrooms,
+        Err(e) => {
+            warn!("Failed to get classrooms list from Redis cache: {}", e);
+            None
+        }
+    };
+    
+    if let Some(classrooms_str) = cached_classrooms {
+        if let Ok(classrooms) = serde_json::from_str::<Vec<classroom::Model>>(&classrooms_str) {
+            return (StatusCode::OK, Json(classrooms)).into_response();
+        }
+    }
+
+    // Fallback to database
     match classroom::Entity::find().all(&state.db).await {
-        Ok(classrooms) => (StatusCode::OK, Json(classrooms)).into_response(),
+        Ok(classrooms) => {
+            // Cache the result for future requests
+            let result: Result<(), redis::RedisError> = redis
+                .set_options(
+                    CLASSROOMS_LIST_KEY,
+                    serde_json::to_string(&classrooms).unwrap(),
+                    get_redis_options(),
+                )
+                .await;
+            if let Err(e) = result {
+                warn!("Failed to cache classrooms list in Redis: {}", e);
+            }
+            (StatusCode::OK, Json(classrooms)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to fetch classrooms",
@@ -219,77 +292,150 @@ pub async fn get_classroom(
         with_reservations,
     } = query;
 
-    match classroom::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(classroom)) => match (with_keys, with_reservations) {
-            (Some(true), Some(true)) => {
-                let keys_result = classroom
-                    .find_related(crate::entities::key::Entity)
-                    .all(&state.db)
-                    .await;
+    // Clone connection once for this handler
+    let mut redis = state.redis.clone();
+    
+    // Determine cache key based on query parameters
+    let cache_key = match (with_keys, with_reservations) {
+        (Some(true), Some(true)) => classroom_with_keys_and_reservations_key(&id),
+        (Some(true), _) => classroom_with_keys_key(&id),
+        (_, Some(true)) => classroom_with_reservations_key(&id),
+        _ => classroom_key(&id),
+    };
 
-                let reservations_result = classroom
-                    .find_related(crate::entities::reservation::Entity)
-                    .all(&state.db)
-                    .await;
+    // Try to get from cache first
+    let cached_data: Option<String> = match redis.get_ex(&cache_key, REDIS_EXPIRY).await {
+        Ok(data) => data,
+        Err(e) => {
+            warn!("Failed to get classroom {} from Redis cache: {}", id, e);
+            None
+        }
+    };
 
-                match (keys_result, reservations_result) {
-                    (Ok(keys), Ok(reservations)) => {
-                        let response = serde_json::json!({
-                            "classroom": classroom,
-                            "keys": keys,
-                            "reservations": reservations,
-                        });
-                        (StatusCode::OK, Json(response)).into_response()
+    if let Some(data_str) = cached_data {
+        // Try to parse as the appropriate response type
+        if let Ok(response) = serde_json::from_str::<serde_json::Value>(&data_str) {
+            return (StatusCode::OK, Json(response)).into_response();
+        }
+    }
+
+    // Fallback to database
+    match classroom::Entity::find_by_id(id.clone()).one(&state.db).await {
+        Ok(Some(classroom)) => {
+            match (with_keys, with_reservations) {
+                (Some(true), Some(true)) => {
+                    let keys_result = classroom
+                        .find_related(crate::entities::key::Entity)
+                        .all(&state.db)
+                        .await;
+
+                    let reservations_result = classroom
+                        .find_related(crate::entities::reservation::Entity)
+                        .all(&state.db)
+                        .await;
+
+                    match (keys_result, reservations_result) {
+                        (Ok(keys), Ok(reservations)) => {
+                            let response = serde_json::json!({
+                                "classroom": classroom,
+                                "keys": keys,
+                                "reservations": reservations,
+                            });
+                            // Cache the response
+                            let _: Result<(), redis::RedisError> = redis
+                                .set_options(
+                                    &cache_key,
+                                    serde_json::to_string(&response).unwrap(),
+                                    get_redis_options(),
+                                )
+                                .await;
+                            return (StatusCode::OK, Json(response)).into_response();
+                        }
+                        _ => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to fetch classroom with keys and reservations",
+                            )
+                                .into_response();
+                        }
                     }
-                    _ => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to fetch classroom with keys and reservations",
-                    )
-                        .into_response(),
+                }
+                (Some(true), _) => {
+                    let keys_result = classroom
+                        .find_related(crate::entities::key::Entity)
+                        .all(&state.db)
+                        .await;
+                    match keys_result {
+                        Ok(keys) => {
+                            let response = serde_json::json!({
+                                "classroom": classroom,
+                                "keys": keys,
+                            });
+                            // Cache the response
+                            let _: Result<(), redis::RedisError> = redis
+                                .set_options(
+                                    &cache_key,
+                                    serde_json::to_string(&response).unwrap(),
+                                    get_redis_options(),
+                                )
+                                .await;
+                            return (StatusCode::OK, Json(response)).into_response();
+                        }
+                        Err(_) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to fetch classroom with keys",
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+                (_, Some(true)) => {
+                    let reservations_result = classroom
+                        .find_related(crate::entities::reservation::Entity)
+                        .all(&state.db)
+                        .await;
+                    match reservations_result {
+                        Ok(reservations) => {
+                            let response = serde_json::json!({
+                                "classroom": classroom,
+                                "reservations": reservations,
+                            });
+                            // Cache the response
+                            let _: Result<(), redis::RedisError> = redis
+                                .set_options(
+                                    &cache_key,
+                                    serde_json::to_string(&response).unwrap(),
+                                    get_redis_options(),
+                                )
+                                .await;
+                            return (StatusCode::OK, Json(response)).into_response();
+                        }
+                        Err(_) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to fetch classroom with reservations",
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+                _ => {
+                    // Cache the basic classroom
+                    let result: Result<(), redis::RedisError> = redis
+                        .set_options(
+                            &cache_key,
+                            serde_json::to_string(&classroom).unwrap(),
+                            get_redis_options(),
+                        )
+                        .await;
+                    if let Err(e) = result {
+                        warn!("Failed to cache classroom {} in Redis: {}", id, e);
+                    }
+                    (StatusCode::OK, Json(classroom)).into_response()
                 }
             }
-            (Some(true), _) => {
-                let keys_result = classroom
-                    .find_related(crate::entities::key::Entity)
-                    .all(&state.db)
-                    .await;
-                match keys_result {
-                    Ok(keys) => {
-                        let response = serde_json::json!({
-                            "classroom": classroom,
-                            "keys": keys,
-                        });
-                        (StatusCode::OK, Json(response)).into_response()
-                    }
-                    Err(_) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to fetch classroom with keys",
-                    )
-                        .into_response(),
-                }
-            }
-            (_, Some(true)) => {
-                let reservations_result = classroom
-                    .find_related(crate::entities::reservation::Entity)
-                    .all(&state.db)
-                    .await;
-                match reservations_result {
-                    Ok(reservations) => {
-                        let response = serde_json::json!({
-                            "classroom": classroom,
-                            "reservations": reservations,
-                        });
-                        (StatusCode::OK, Json(response)).into_response()
-                    }
-                    Err(_) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to fetch classroom with reservations",
-                    )
-                        .into_response(),
-                }
-            }
-            _ => (StatusCode::OK, Json(classroom)).into_response(),
-        },
+        }
         Ok(None) => (StatusCode::NOT_FOUND, "Classroom not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -330,7 +476,28 @@ pub async fn update_classroom(
             classroom.description = Set(body.description);
 
             match classroom.update(&state.db).await {
-                Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
+                Ok(updated) => {
+                    // Update cache and invalidate related caches
+                    let mut redis = state.redis.clone();
+                    let result: Result<(), redis::RedisError> = redis
+                        .set_options(
+                            classroom_key(&updated.id),
+                            serde_json::to_string(&updated).unwrap(),
+                            get_redis_options(),
+                        )
+                        .await;
+                    if let Err(e) = result {
+                        warn!("Failed to update cache for classroom {} in Redis: {}", updated.id, e);
+                    }
+                    // Invalidate all related caches for this classroom
+                    let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_key(&updated.id)).await;
+                    let _: Result<(), redis::RedisError> = redis.del(classroom_with_reservations_key(&updated.id)).await;
+                    let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_and_reservations_key(&updated.id)).await;
+                    // Invalidate classrooms list cache
+                    let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
+                    
+                    (StatusCode::OK, Json(updated)).into_response()
+                }
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to update classroom",
@@ -405,6 +572,25 @@ pub async fn update_classroom_photo(
     match upload_result {
         Ok(resp) => {
             if resp.status().is_success() {
+                // Update cache and invalidate related caches
+                let mut redis = state.redis.clone();
+                let result: Result<(), redis::RedisError> = redis
+                    .set_options(
+                        classroom_key(&classroom_model.id),
+                        serde_json::to_string(&classroom_model).unwrap(),
+                        get_redis_options(),
+                    )
+                    .await;
+                if let Err(e) = result {
+                    warn!("Failed to update cache for classroom {} in Redis: {}", classroom_model.id, e);
+                }
+                // Invalidate all related caches for this classroom
+                let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_key(&classroom_model.id)).await;
+                let _: Result<(), redis::RedisError> = redis.del(classroom_with_reservations_key(&classroom_model.id)).await;
+                let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_and_reservations_key(&classroom_model.id)).await;
+                // Invalidate classrooms list cache
+                let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
+                
                 (StatusCode::OK, Json(classroom_model)).into_response()
             } else {
                 (StatusCode::BAD_REQUEST, resp.text().await.unwrap()).into_response()
@@ -467,8 +653,22 @@ pub async fn delete_classroom(
         println!("WARN: Failed to delete classroom image on image server.");
     }
 
+    // Save classroom ID before deleting (delete consumes the model)
+    let classroom_id = classroom_model.id.clone();
+    
     match classroom_model.delete(&state.db).await {
-        Ok(_) => (StatusCode::OK, "Classroom deleted successfully").into_response(),
+        Ok(_) => {
+            // Invalidate all caches for this classroom
+            let mut redis = state.redis.clone();
+            let _: Result<(), redis::RedisError> = redis.del(classroom_key(&classroom_id)).await;
+            let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_key(&classroom_id)).await;
+            let _: Result<(), redis::RedisError> = redis.del(classroom_with_reservations_key(&classroom_id)).await;
+            let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_and_reservations_key(&classroom_id)).await;
+            // Invalidate classrooms list cache
+            let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
+            
+            (StatusCode::OK, "Classroom deleted successfully").into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to delete classroom",

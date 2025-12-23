@@ -6,6 +6,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use axum_login::{login_required, permission_required};
+use redis::AsyncCommands;
 use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait,
@@ -13,6 +14,7 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use string_builder::Builder;
+use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{
@@ -24,6 +26,7 @@ use crate::{
         user,
     },
     login_system::{AuthBackend, AuthSession},
+    utils::{get_redis_options, REDIS_EXPIRY},
 };
 
 use nanoid::nanoid;
@@ -147,6 +150,25 @@ pub async fn create_reservation(
 
     match new_reservation.insert(&state.db).await {
         Ok(model) => {
+            // Cache the new reservation
+            let mut redis = state.redis.clone();
+            let result: Result<(), redis::RedisError> = redis
+                .set_options(
+                    format!("reservation_{}", model.id),
+                    serde_json::to_string(&model).unwrap(),
+                    get_redis_options(),
+                )
+                .await;
+            if let Err(e) = result {
+                warn!("Failed to cache reservation {} in Redis: {}", model.id, e);
+            }
+            // Invalidate user's reservation list cache
+            if let Some(user_id) = &model.user_id {
+                let _: Result<(), redis::RedisError> = redis
+                    .del(format!("reservations_user_{}", user_id))
+                    .await;
+            }
+
             let _ = send_email(
                 user.email,
                 "Reservation Created",
@@ -225,7 +247,7 @@ pub async fn review_reservation(
         reject_reason,
     } = body;
 
-    match reservation::Entity::find_by_id(id).one(&state.db).await {
+    match reservation::Entity::find_by_id(&id).one(&state.db).await {
         Ok(Some(res_model)) => {
             let mut reservation: reservation::ActiveModel = res_model.into();
             reservation.status = Set(status);
@@ -233,6 +255,18 @@ pub async fn review_reservation(
 
             match reservation.update(&state.db).await {
                 Ok(reservation_updated) => {
+                    // Invalidate cache for this reservation
+                    let mut redis = state.redis.clone();
+                    let _: Result<(), redis::RedisError> = redis
+                        .del(format!("reservation_{}", reservation_updated.id))
+                        .await;
+                    // Also invalidate user's reservation list cache if it exists
+                    if let Some(user_id) = &reservation_updated.user_id {
+                        let _: Result<(), redis::RedisError> = redis
+                            .del(format!("reservations_user_{}", user_id))
+                            .await;
+                    }
+
                     let user = match user::Entity::find_by_id(
                         reservation_updated.user_id.as_ref().unwrap(),
                     )
@@ -383,7 +417,27 @@ pub async fn update_reservation(
     }
 
     match reservation.update(&state.db).await {
-        Ok(updated) => (StatusCode::OK, Json(updated)).into_response(),
+        Ok(updated) => {
+            // Update cache and invalidate user's list cache
+            let mut redis = state.redis.clone();
+            let result: Result<(), redis::RedisError> = redis
+                .set_options(
+                    format!("reservation_{}", updated.id),
+                    serde_json::to_string(&updated).unwrap(),
+                    get_redis_options(),
+                )
+                .await;
+            if let Err(e) = result {
+                warn!("Failed to update cache for reservation {} in Redis: {}", updated.id, e);
+            }
+            // Invalidate user's reservation list cache
+            if let Some(user_id) = &updated.user_id {
+                let _: Result<(), redis::RedisError> = redis
+                    .del(format!("reservations_user_{}", user_id))
+                    .await;
+            }
+            (StatusCode::OK, Json(updated)).into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update reservation",
@@ -444,12 +498,49 @@ pub async fn get_all_reservations_for_self(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let user = session.user.unwrap();
-    let reservations = match reservation::Entity::find()
-        .filter(reservation::Column::UserId.eq(user.id))
-        .all(&state.db)
+    
+    // Clone connection once for this handler
+    let mut redis = state.redis.clone();
+    
+    // Try to get from cache first
+    let cache_key = format!("reservations_user_{}", user.id);
+    let cached_reservations: Option<String> = match redis
+        .get_ex(&cache_key, REDIS_EXPIRY)
         .await
     {
         Ok(reservations) => reservations,
+        Err(e) => {
+            warn!("Failed to get reservations for user {} from Redis cache: {}", user.id, e);
+            None
+        }
+    };
+    
+    if let Some(reservations_str) = cached_reservations {
+        if let Ok(reservations) = serde_json::from_str::<Vec<reservation::Model>>(&reservations_str) {
+            return (StatusCode::OK, Json(reservations)).into_response();
+        }
+    }
+
+    // Fallback to database
+    let reservations = match reservation::Entity::find()
+        .filter(reservation::Column::UserId.eq(&user.id))
+        .all(&state.db)
+        .await
+    {
+        Ok(reservations) => {
+            // Cache the result for future requests
+            let result: Result<(), redis::RedisError> = redis
+                .set_options(
+                    cache_key,
+                    serde_json::to_string(&reservations).unwrap(),
+                    get_redis_options(),
+                )
+                .await;
+            if let Err(e) = result {
+                warn!("Failed to cache reservations for user {} in Redis: {}", user.id, e);
+            }
+            reservations
+        }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -514,8 +605,24 @@ pub async fn cancel_reservation(
             .into_response();
     }
 
+    // Save user_id before deleting (delete consumes the reservation)
+    let user_id = reservation.user_id.clone();
+
     match reservation.delete(&state.db).await {
-        Ok(_) => (StatusCode::OK, "Reservation cancelled successfully").into_response(),
+        Ok(_) => {
+            // Invalidate cache
+            let mut redis = state.redis.clone();
+            let _: Result<(), redis::RedisError> = redis
+                .del(format!("reservation_{}", id))
+                .await;
+            // Invalidate user's reservation list cache
+            if let Some(user_id) = user_id {
+                let _: Result<(), redis::RedisError> = redis
+                    .del(format!("reservations_user_{}", user_id))
+                    .await;
+            }
+            (StatusCode::OK, "Reservation cancelled successfully").into_response()
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to cancel reservation",
@@ -546,8 +653,43 @@ pub async fn admin_get_reservation_by_id(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match reservation::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(model)) => (StatusCode::OK, Json(model)).into_response(),
+    // Clone connection once for this handler
+    let mut redis = state.redis.clone();
+    
+    // Try to get from cache first
+    let cached_reservation: Option<String> = match redis
+        .get_ex(format!("reservation_{}", id), REDIS_EXPIRY)
+        .await
+    {
+        Ok(reservation) => reservation,
+        Err(e) => {
+            warn!("Failed to get reservation {} from Redis cache: {}", id, e);
+            None
+        }
+    };
+    
+    if let Some(reservation_str) = cached_reservation {
+        if let Ok(reservation) = serde_json::from_str::<reservation::Model>(&reservation_str) {
+            return (StatusCode::OK, Json(reservation)).into_response();
+        }
+    }
+
+    // Fallback to database
+    match reservation::Entity::find_by_id(&id).one(&state.db).await {
+        Ok(Some(model)) => {
+            // Cache the result for future requests
+            let result: Result<(), redis::RedisError> = redis
+                .set_options(
+                    format!("reservation_{}", model.id),
+                    serde_json::to_string(&model).unwrap(),
+                    get_redis_options(),
+                )
+                .await;
+            if let Err(e) = result {
+                warn!("Failed to cache reservation {} in Redis: {}", model.id, e);
+            }
+            (StatusCode::OK, Json(model)).into_response()
+        }
         Ok(None) => (StatusCode::NOT_FOUND, "Reservation not found").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,

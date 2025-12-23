@@ -1,22 +1,46 @@
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use chrono::{Duration, Utc};
 use nanoid::nanoid;
+use redis::AsyncCommands;
 use sea_orm::{
     ActiveModelTrait,
-    ActiveValue::{NotSet, Set},
+    ActiveValue::Set,
     ColumnTrait, EntityTrait, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{
     AppState, argon_hasher,
     email_client::send_email,
-    entities::{password_reset, user},
+    entities::user,
+    utils::get_redis_options,
 };
 
-const CODE_TTL_MINUTES: i64 = 10;
-const TOKEN_TTL_MINUTES: i64 = 15;
+const CODE_TTL_SECONDS: u64 = 10 * 60; // 10 minutes
+const TOKEN_TTL_SECONDS: u64 = 15 * 60; // 15 minutes
+
+// Redis key prefixes
+fn code_key(email: &str) -> String {
+    format!("password_reset:code:{}", email)
+}
+
+fn token_key(email: &str) -> String {
+    format!("password_reset:token:{}", email)
+}
+
+#[derive(Serialize, Deserialize)]
+struct CodeData {
+    code: String,
+    expires_at: i64, // Unix timestamp
+}
+
+#[derive(Serialize, Deserialize)]
+struct TokenData {
+    token: String,
+    expires_at: i64, // Unix timestamp
+}
 
 fn gen_6_digit_code() -> String {
     const DIGITS: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -64,7 +88,7 @@ pub async fn forgot_password(
 ) -> impl IntoResponse {
     let email = body.email.trim().to_lowercase();
 
-    // 先查 user 是否存在（但回應一律 200）
+    // Check if user exists (but always return 200 to avoid email enumeration)
     let exists = match user::Entity::find()
         .filter(user::Column::Email.eq(email.clone()))
         .one(&state.db)
@@ -80,26 +104,25 @@ pub async fn forgot_password(
     if exists {
         let code = gen_6_digit_code();
         let now = Utc::now();
-        let code_exp = now + Duration::minutes(CODE_TTL_MINUTES);
+        let expires_at = (now + Duration::minutes(CODE_TTL_SECONDS as i64 / 60)).timestamp();
 
-        // 同 email 只保留一筆（先刪再建）
-        let _ = password_reset::Entity::delete_many()
-            .filter(password_reset::Column::Email.eq(email.clone()))
-            .exec(&state.db)
-            .await;
-
-        let record = password_reset::ActiveModel {
-            id: Set(nanoid!()),
-            email: Set(email.clone()),
-            code: Set(Some(code.clone())),
-            code_expires_at: Set(Some(code_exp.into())),
-            reset_token: Set(None),
-            reset_token_expires_at: Set(None),
-            created_at: NotSet,
-            updated_at: NotSet,
+        let code_data = CodeData {
+            code: code.clone(),
+            expires_at,
         };
 
-        if record.insert(&state.db).await.is_err() {
+        // Store code in Redis with TTL (this automatically replaces any existing code for this email)
+        let mut redis = state.redis.clone();
+        let result: Result<(), redis::RedisError> = redis
+            .set_options(
+                code_key(&email),
+                serde_json::to_string(&code_data).unwrap(),
+                get_redis_options().with_expiration(redis::SetExpiry::EX(CODE_TTL_SECONDS)),
+            )
+            .await;
+
+        if let Err(e) = result {
+            warn!("Failed to store password reset code for {} in Redis: {}", email, e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create reset record",
@@ -107,9 +130,13 @@ pub async fn forgot_password(
                 .into_response();
         }
 
+        // Also delete any existing token for this email (cleanup)
+        let _: Result<(), redis::RedisError> = redis.del(token_key(&email)).await;
+
         let subject = "Password Reset Verification Code";
         let content = format!(
-            "Your password reset verification code is: {code}\n\nThis code will expire in {CODE_TTL_MINUTES} minutes."
+            "Your password reset verification code is: {code}\n\nThis code will expire in {} minutes.",
+            CODE_TTL_SECONDS / 60
         );
 
         if send_email(&email, subject, content).await.is_err() {
@@ -142,51 +169,63 @@ pub async fn verify_code(
 ) -> impl IntoResponse {
     let email = body.email.trim().to_lowercase();
     let code = body.code.trim().to_string();
-    let now = Utc::now();
-    let now_tz: sea_orm::prelude::DateTimeWithTimeZone = now.into();
+    let now = Utc::now().timestamp();
 
-    let rec = match password_reset::Entity::find()
-        .filter(password_reset::Column::Email.eq(email.clone()))
-        .one(&state.db)
-        .await
-    {
-        Ok(Some(r)) => r,
-        Ok(None) => return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response(),
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to query reset record",
-            )
-                .into_response();
+    // Get code from Redis
+    let mut redis = state.redis.clone();
+    let code_str: Option<String> = match redis.get(code_key(&email)).await {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("Failed to get password reset code for {} from Redis: {}", email, e);
+            return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response();
         }
     };
 
-    let code_ok = match (rec.code.clone(), rec.code_expires_at) {
-        (Some(saved), Some(exp)) => saved == code && exp > now_tz,
-        _ => false,
+    let code_data: CodeData = match code_str {
+        Some(s) => match serde_json::from_str(&s) {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("Failed to parse password reset code data for {}: {}", email, e);
+                return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response();
+            }
+        },
+        None => return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response(),
     };
 
-    if !code_ok {
+    // Verify code and expiration
+    if code_data.code != code || code_data.expires_at <= now {
         return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response();
     }
 
+    // Generate reset token
     let reset_token = nanoid!(32);
-    let token_exp = now + Duration::minutes(TOKEN_TTL_MINUTES);
+    let expires_at = (Utc::now() + Duration::minutes(TOKEN_TTL_SECONDS as i64 / 60)).timestamp();
 
-    // 更新 record：發 token、清掉 code（避免重複驗證）
-    let mut active: password_reset::ActiveModel = rec.into();
-    active.reset_token = Set(Some(reset_token.clone()));
-    active.reset_token_expires_at = Set(Some(token_exp.into()));
-    active.code = Set(None);
-    active.code_expires_at = Set(None);
+    let token_data = TokenData {
+        token: reset_token.clone(),
+        expires_at,
+    };
 
-    if active.update(&state.db).await.is_err() {
+    // Store token in Redis and delete code (to prevent reuse)
+    let result: Result<(), redis::RedisError> = redis
+        .set_options(
+            token_key(&email),
+            serde_json::to_string(&token_data).unwrap(),
+            get_redis_options().with_expiration(redis::SetExpiry::EX(TOKEN_TTL_SECONDS)),
+        )
+        .await;
+
+    if let Err(e) = result {
+        warn!("Failed to store password reset token for {} in Redis: {}", email, e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update reset record",
         )
             .into_response();
     }
+
+    // Delete the code (prevent reuse)
+    let _: Result<(), redis::RedisError> = redis.del(code_key(&email)).await;
 
     (StatusCode::OK, Json(VerifyCodeResponse { reset_token })).into_response()
 }
@@ -219,37 +258,37 @@ pub async fn reset_password(
             .into_response();
     }
 
-    let now = Utc::now();
-    let now_tz: sea_orm::prelude::DateTimeWithTimeZone = now.into();
+    let now = Utc::now().timestamp();
 
-    let rec = match password_reset::Entity::find()
-        .filter(password_reset::Column::Email.eq(email.clone()))
-        .one(&state.db)
-        .await
-    {
-        Ok(Some(r)) => r,
-        Ok(None) => {
+    // Get token from Redis
+    let mut redis = state.redis.clone();
+    let token_str: Option<String> = match redis.get(token_key(&email)).await {
+        Ok(t) => t,
+        Err(e) => {
+            warn!("Failed to get password reset token for {} from Redis: {}", email, e);
             return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
         }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to query reset record",
-            )
-                .into_response();
+    };
+
+    let token_data: TokenData = match token_str {
+        Some(s) => match serde_json::from_str(&s) {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("Failed to parse password reset token data for {}: {}", email, e);
+                return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
         }
     };
 
-    let token_ok = match (rec.reset_token.clone(), rec.reset_token_expires_at) {
-        (Some(saved), Some(exp)) => saved == token && exp > now_tz,
-        _ => false,
-    };
-
-    if !token_ok {
+    // Verify token and expiration
+    if token_data.token != token || token_data.expires_at <= now {
         return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
     }
 
-    // 找 user
+    // Find user in database
     let u = match user::Entity::find()
         .filter(user::Column::Email.eq(email.clone()))
         .one(&state.db)
@@ -262,7 +301,10 @@ pub async fn reset_password(
         }
     };
 
-    // 更新密碼
+    // Save user ID before converting to ActiveModel
+    let user_id = u.id.clone();
+
+    // Hash new password
     let new_hash = match argon_hasher::hash(body.new_password.as_bytes()).await {
         Ok(h) => h,
         Err(_) => {
@@ -270,6 +312,7 @@ pub async fn reset_password(
         }
     };
 
+    // Update password in database
     let mut ua: user::ActiveModel = u.into();
     ua.password = Set(new_hash);
 
@@ -281,11 +324,11 @@ pub async fn reset_password(
             .into_response();
     }
 
-    // 重置成功：刪掉 reset record
-    let _ = password_reset::Entity::delete_many()
-        .filter(password_reset::Column::Email.eq(email))
-        .exec(&state.db)
-        .await;
+    // Invalidate user cache in Redis (password changed)
+    let _: Result<(), redis::RedisError> = redis.del(format!("user_{}", user_id)).await;
+
+    // Delete reset token from Redis (successful reset)
+    let _: Result<(), redis::RedisError> = redis.del(token_key(&email)).await;
 
     (StatusCode::OK, "Password reset successfully").into_response()
 }
