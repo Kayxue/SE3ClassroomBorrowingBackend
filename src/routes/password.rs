@@ -163,7 +163,7 @@ pub async fn verify_code(
     State(state): State<AppState>,
     Json(body): Json<VerifyCodeBody>,
 ) -> impl IntoResponse {
-    let email = body.email.trim().to_lowercase();
+    let email = body.email.trim().to_owned();
     let code = body.code.trim().to_string();
     let now = Utc::now().timestamp();
 
