@@ -29,24 +29,14 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 use utoipa::ToSchema;
 
-use crate::{AppState, utils::{get_redis_options, REDIS_EXPIRY}};
-
-// Redis cache key helpers
-fn classroom_key(id: &str) -> String {
-    format!("classroom_{}", id)
-}
-
-fn classroom_with_keys_key(id: &str) -> String {
-    format!("classroom_{}_keys", id)
-}
-
-fn classroom_with_reservations_key(id: &str) -> String {
-    format!("classroom_{}_reservations", id)
-}
-
-fn classroom_with_keys_and_reservations_key(id: &str) -> String {
-    format!("classroom_{}_keys_reservations", id)
-}
+use crate::{
+    AppState,
+    constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS},
+    utils::{
+        classroom_key, classroom_with_keys_and_reservations_key, classroom_with_keys_key,
+        classroom_with_reservations_key,
+    },
+};
 
 const CLASSROOMS_LIST_KEY: &str = "classrooms:list";
 
@@ -191,7 +181,7 @@ pub async fn create_classroom(
                 .set_options(
                     classroom_key(&classroom.id),
                     serde_json::to_string(&classroom).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -199,7 +189,7 @@ pub async fn create_classroom(
             }
             // Invalidate classrooms list cache
             let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
-            
+
             (StatusCode::CREATED, Json(classroom)).into_response()
         }
         Err(_) => (
@@ -223,19 +213,17 @@ pub async fn create_classroom(
 pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse {
     // Clone connection once for this handler
     let mut redis = state.redis.clone();
-    
+
     // Try to get from cache first
-    let cached_classrooms: Option<String> = match redis
-        .get_ex(CLASSROOMS_LIST_KEY, REDIS_EXPIRY)
-        .await
-    {
-        Ok(classrooms) => classrooms,
-        Err(e) => {
-            warn!("Failed to get classrooms list from Redis cache: {}", e);
-            None
-        }
-    };
-    
+    let cached_classrooms: Option<String> =
+        match redis.get_ex(CLASSROOMS_LIST_KEY, REDIS_EXPIRY).await {
+            Ok(classrooms) => classrooms,
+            Err(e) => {
+                warn!("Failed to get classrooms list from Redis cache: {}", e);
+                None
+            }
+        };
+
     if let Some(classrooms_str) = cached_classrooms {
         if let Ok(classrooms) = serde_json::from_str::<Vec<classroom::Model>>(&classrooms_str) {
             return (StatusCode::OK, Json(classrooms)).into_response();
@@ -250,7 +238,7 @@ pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse
                 .set_options(
                     CLASSROOMS_LIST_KEY,
                     serde_json::to_string(&classrooms).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -294,7 +282,7 @@ pub async fn get_classroom(
 
     // Clone connection once for this handler
     let mut redis = state.redis.clone();
-    
+
     // Determine cache key based on query parameters
     let cache_key = match (with_keys, with_reservations) {
         (Some(true), Some(true)) => classroom_with_keys_and_reservations_key(&id),
@@ -320,7 +308,10 @@ pub async fn get_classroom(
     }
 
     // Fallback to database
-    match classroom::Entity::find_by_id(id.clone()).one(&state.db).await {
+    match classroom::Entity::find_by_id(id.clone())
+        .one(&state.db)
+        .await
+    {
         Ok(Some(classroom)) => {
             match (with_keys, with_reservations) {
                 (Some(true), Some(true)) => {
@@ -346,7 +337,7 @@ pub async fn get_classroom(
                                 .set_options(
                                     &cache_key,
                                     serde_json::to_string(&response).unwrap(),
-                                    get_redis_options(),
+                                    *REDIS_SET_OPTIONS,
                                 )
                                 .await;
                             return (StatusCode::OK, Json(response)).into_response();
@@ -376,7 +367,7 @@ pub async fn get_classroom(
                                 .set_options(
                                     &cache_key,
                                     serde_json::to_string(&response).unwrap(),
-                                    get_redis_options(),
+                                    *REDIS_SET_OPTIONS,
                                 )
                                 .await;
                             return (StatusCode::OK, Json(response)).into_response();
@@ -406,7 +397,7 @@ pub async fn get_classroom(
                                 .set_options(
                                     &cache_key,
                                     serde_json::to_string(&response).unwrap(),
-                                    get_redis_options(),
+                                    *REDIS_SET_OPTIONS,
                                 )
                                 .await;
                             return (StatusCode::OK, Json(response)).into_response();
@@ -426,7 +417,7 @@ pub async fn get_classroom(
                         .set_options(
                             &cache_key,
                             serde_json::to_string(&classroom).unwrap(),
-                            get_redis_options(),
+                            *REDIS_SET_OPTIONS,
                         )
                         .await;
                     if let Err(e) = result {
@@ -483,19 +474,27 @@ pub async fn update_classroom(
                         .set_options(
                             classroom_key(&updated.id),
                             serde_json::to_string(&updated).unwrap(),
-                            get_redis_options(),
+                            *REDIS_SET_OPTIONS,
                         )
                         .await;
                     if let Err(e) = result {
-                        warn!("Failed to update cache for classroom {} in Redis: {}", updated.id, e);
+                        warn!(
+                            "Failed to update cache for classroom {} in Redis: {}",
+                            updated.id, e
+                        );
                     }
                     // Invalidate all related caches for this classroom
-                    let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_key(&updated.id)).await;
-                    let _: Result<(), redis::RedisError> = redis.del(classroom_with_reservations_key(&updated.id)).await;
-                    let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_and_reservations_key(&updated.id)).await;
+                    let _: Result<(), redis::RedisError> =
+                        redis.del(classroom_with_keys_key(&updated.id)).await;
+                    let _: Result<(), redis::RedisError> = redis
+                        .del(classroom_with_reservations_key(&updated.id))
+                        .await;
+                    let _: Result<(), redis::RedisError> = redis
+                        .del(classroom_with_keys_and_reservations_key(&updated.id))
+                        .await;
                     // Invalidate classrooms list cache
                     let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
-                    
+
                     (StatusCode::OK, Json(updated)).into_response()
                 }
                 Err(_) => (
@@ -578,19 +577,30 @@ pub async fn update_classroom_photo(
                     .set_options(
                         classroom_key(&classroom_model.id),
                         serde_json::to_string(&classroom_model).unwrap(),
-                        get_redis_options(),
+                        *REDIS_SET_OPTIONS,
                     )
                     .await;
                 if let Err(e) = result {
-                    warn!("Failed to update cache for classroom {} in Redis: {}", classroom_model.id, e);
+                    warn!(
+                        "Failed to update cache for classroom {} in Redis: {}",
+                        classroom_model.id, e
+                    );
                 }
                 // Invalidate all related caches for this classroom
-                let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_key(&classroom_model.id)).await;
-                let _: Result<(), redis::RedisError> = redis.del(classroom_with_reservations_key(&classroom_model.id)).await;
-                let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_and_reservations_key(&classroom_model.id)).await;
+                let _: Result<(), redis::RedisError> = redis
+                    .del(classroom_with_keys_key(&classroom_model.id))
+                    .await;
+                let _: Result<(), redis::RedisError> = redis
+                    .del(classroom_with_reservations_key(&classroom_model.id))
+                    .await;
+                let _: Result<(), redis::RedisError> = redis
+                    .del(classroom_with_keys_and_reservations_key(
+                        &classroom_model.id,
+                    ))
+                    .await;
                 // Invalidate classrooms list cache
                 let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
-                
+
                 (StatusCode::OK, Json(classroom_model)).into_response()
             } else {
                 (StatusCode::BAD_REQUEST, resp.text().await.unwrap()).into_response()
@@ -655,18 +665,23 @@ pub async fn delete_classroom(
 
     // Save classroom ID before deleting (delete consumes the model)
     let classroom_id = classroom_model.id.clone();
-    
+
     match classroom_model.delete(&state.db).await {
         Ok(_) => {
             // Invalidate all caches for this classroom
             let mut redis = state.redis.clone();
             let _: Result<(), redis::RedisError> = redis.del(classroom_key(&classroom_id)).await;
-            let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_key(&classroom_id)).await;
-            let _: Result<(), redis::RedisError> = redis.del(classroom_with_reservations_key(&classroom_id)).await;
-            let _: Result<(), redis::RedisError> = redis.del(classroom_with_keys_and_reservations_key(&classroom_id)).await;
+            let _: Result<(), redis::RedisError> =
+                redis.del(classroom_with_keys_key(&classroom_id)).await;
+            let _: Result<(), redis::RedisError> = redis
+                .del(classroom_with_reservations_key(&classroom_id))
+                .await;
+            let _: Result<(), redis::RedisError> = redis
+                .del(classroom_with_keys_and_reservations_key(&classroom_id))
+                .await;
             // Invalidate classrooms list cache
             let _: Result<(), redis::RedisError> = redis.del(CLASSROOMS_LIST_KEY).await;
-            
+
             (StatusCode::OK, "Classroom deleted successfully").into_response()
         }
         Err(_) => (

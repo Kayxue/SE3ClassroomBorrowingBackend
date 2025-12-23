@@ -1,21 +1,14 @@
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use chrono::{Duration, Utc};
 use nanoid::nanoid;
-use redis::AsyncCommands;
-use sea_orm::{
-    ActiveModelTrait,
-    ActiveValue::Set,
-    ColumnTrait, EntityTrait, QueryFilter,
-};
+use redis::{AsyncCommands, SetOptions};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState, argon_hasher,
-    email_client::send_email,
-    entities::user,
-    utils::get_redis_options,
+    AppState, argon_hasher, email_client::send_email, entities::user,
 };
 
 const CODE_TTL_SECONDS: u64 = 10 * 60; // 10 minutes
@@ -117,12 +110,15 @@ pub async fn forgot_password(
             .set_options(
                 code_key(&email),
                 serde_json::to_string(&code_data).unwrap(),
-                get_redis_options().with_expiration(redis::SetExpiry::EX(CODE_TTL_SECONDS)),
+                SetOptions::default().with_expiration(redis::SetExpiry::EX(CODE_TTL_SECONDS)),
             )
             .await;
 
         if let Err(e) = result {
-            warn!("Failed to store password reset code for {} in Redis: {}", email, e);
+            warn!(
+                "Failed to store password reset code for {} in Redis: {}",
+                email, e
+            );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create reset record",
@@ -176,7 +172,10 @@ pub async fn verify_code(
     let code_str: Option<String> = match redis.get(code_key(&email)).await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Failed to get password reset code for {} from Redis: {}", email, e);
+            warn!(
+                "Failed to get password reset code for {} from Redis: {}",
+                email, e
+            );
             return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response();
         }
     };
@@ -185,7 +184,10 @@ pub async fn verify_code(
         Some(s) => match serde_json::from_str(&s) {
             Ok(d) => d,
             Err(e) => {
-                warn!("Failed to parse password reset code data for {}: {}", email, e);
+                warn!(
+                    "Failed to parse password reset code data for {}: {}",
+                    email, e
+                );
                 return (StatusCode::BAD_REQUEST, "Invalid or expired code").into_response();
             }
         },
@@ -211,12 +213,15 @@ pub async fn verify_code(
         .set_options(
             token_key(&email),
             serde_json::to_string(&token_data).unwrap(),
-            get_redis_options().with_expiration(redis::SetExpiry::EX(TOKEN_TTL_SECONDS)),
+            SetOptions::default().with_expiration(redis::SetExpiry::EX(TOKEN_TTL_SECONDS)),
         )
         .await;
 
     if let Err(e) = result {
-        warn!("Failed to store password reset token for {} in Redis: {}", email, e);
+        warn!(
+            "Failed to store password reset token for {} in Redis: {}",
+            email, e
+        );
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update reset record",
@@ -265,7 +270,10 @@ pub async fn reset_password(
     let token_str: Option<String> = match redis.get(token_key(&email)).await {
         Ok(t) => t,
         Err(e) => {
-            warn!("Failed to get password reset token for {} from Redis: {}", email, e);
+            warn!(
+                "Failed to get password reset token for {} from Redis: {}",
+                email, e
+            );
             return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
         }
     };
@@ -274,7 +282,10 @@ pub async fn reset_password(
         Some(s) => match serde_json::from_str(&s) {
             Ok(d) => d,
             Err(e) => {
-                warn!("Failed to parse password reset token data for {}: {}", email, e);
+                warn!(
+                    "Failed to parse password reset token data for {}: {}",
+                    email, e
+                );
                 return (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response();
             }
         },

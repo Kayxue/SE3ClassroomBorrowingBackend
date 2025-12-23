@@ -31,6 +31,7 @@ mod entities;
 mod login_system;
 mod routes;
 mod utils;
+mod constants;
 #[cfg(test)]
 mod utils_test;
 

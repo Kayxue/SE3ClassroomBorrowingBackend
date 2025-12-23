@@ -1,8 +1,5 @@
 use chrono::{Datelike, Local};
-use redis::{Expiry, SetExpiry, SetOptions};
-
-pub const REDIS_EXPIRY_SECONDS: u64 = 60;
-pub const REDIS_EXPIRY: Expiry = Expiry::EX(REDIS_EXPIRY_SECONDS);
+use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
 
 pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
     let id = student_id.as_ref();
@@ -49,6 +46,48 @@ pub fn check_student_id(student_id: impl AsRef<str>) -> bool {
     return true;
 }
 
-pub fn get_redis_options() -> SetOptions {
-    SetOptions::default().with_expiration(SetExpiry::EX(REDIS_EXPIRY_SECONDS))
+pub fn classroom_key(id: &str) -> String {
+    format!("classroom_{}", id)
+}
+
+pub fn classroom_with_keys_key(id: &str) -> String {
+    format!("classroom_{}_keys", id)
+}
+
+pub fn classroom_with_reservations_key(id: &str) -> String {
+    format!("classroom_{}_reservations", id)
+}
+
+pub fn classroom_with_keys_and_reservations_key(id: &str) -> String {
+    format!("classroom_{}_keys_reservations", id)
+}
+
+// ===============================
+//   datetime parser (minimal add)
+// ===============================
+pub fn parse_dt(s: &str) -> Result<ChronoDateTime<FixedOffset>, ()> {
+    let raw = s.trim();
+
+    // 1) already has offset / Z
+    if let Ok(dt) = raw.parse::<ChronoDateTime<FixedOffset>>() {
+        return Ok(dt);
+    }
+
+    // 2) normalize then append +08:00 (Taiwan)
+    let mut base = raw.to_string();
+
+    // "YYYY-MM-DD HH:MM" -> "YYYY-MM-DDTHH:MM"
+    if base.as_bytes().get(10) == Some(&b' ') {
+        base.replace_range(10..11, "T");
+    }
+
+    // add seconds
+    if base.len() == 16 {
+        base.push_str(":00");
+    }
+
+    // add timezone
+    base.push_str("+08:00");
+
+    base.parse::<ChronoDateTime<FixedOffset>>().map_err(|_| ())
 }

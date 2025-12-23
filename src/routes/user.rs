@@ -20,9 +20,10 @@ use utoipa::ToSchema;
 use crate::{
     AppState,
     argon_hasher::{hash, verify},
+    constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS},
     entities::{self, sea_orm_active_enums::Role, user},
     login_system::{AuthBackend, AuthSession, Credentials},
-    utils::{check_student_id, get_redis_options, REDIS_EXPIRY},
+    utils::check_student_id,
 };
 
 use nanoid::nanoid;
@@ -135,7 +136,7 @@ pub async fn register(
                 .set_options(
                     format!("user_{}", user.id),
                     serde_json::to_string(&user).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -233,16 +234,17 @@ async fn profile(session: AuthSession) -> impl IntoResponse {
 pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     // Clone connection once for this handler
     let mut redis = state.redis.clone();
-    
+
     // Try to get from cache first
-    let cached_user: Option<String> = match redis.get_ex(format!("user_{}", id), REDIS_EXPIRY).await {
+    let cached_user: Option<String> = match redis.get_ex(format!("user_{}", id), REDIS_EXPIRY).await
+    {
         Ok(user) => user,
         Err(e) => {
             warn!("Failed to get user {} from Redis cache: {}", id, e);
             None
         }
     };
-    
+
     if let Some(user_str) = cached_user {
         if let Ok(user) = serde_json::from_str::<entities::user::Model>(&user_str) {
             let user_response = UserResponse::from(user);
@@ -258,7 +260,7 @@ pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> 
                 .set_options(
                     format!("user_{}", user.id),
                     serde_json::to_string(&user).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -321,11 +323,14 @@ pub async fn update_password(
                 .set_options(
                     format!("user_{}", updated_user.id),
                     serde_json::to_string(&updated_user).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
-                warn!("Failed to update cache for user {} in Redis: {}", updated_user.id, e);
+                warn!(
+                    "Failed to update cache for user {} in Redis: {}",
+                    updated_user.id, e
+                );
             }
             (StatusCode::OK, "Password updated successfully")
         }
@@ -387,11 +392,14 @@ pub async fn update_profile(
                 .set_options(
                     format!("user_{}", updated_user.id),
                     serde_json::to_string(&updated_user).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
-                warn!("Failed to update cache for user {} in Redis: {}", updated_user.id, e);
+                warn!(
+                    "Failed to update cache for user {} in Redis: {}",
+                    updated_user.id, e
+                );
             }
             let user_response = UserResponse::from(updated_user);
             (StatusCode::OK, Json(user_response)).into_response()

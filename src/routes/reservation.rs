@@ -7,7 +7,6 @@ use axum::{
 };
 use axum_login::{login_required, permission_required};
 use redis::AsyncCommands;
-use sea_orm::sqlx::types::chrono::{DateTime as ChronoDateTime, FixedOffset};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait,
     QueryFilter, QueryOrder,
@@ -18,15 +17,11 @@ use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState,
-    email_client::send_email,
-    entities::{
+    AppState, constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS}, email_client::send_email, entities::{
         reservation,
         sea_orm_active_enums::{ReservationStatus, Role},
         user,
-    },
-    login_system::{AuthBackend, AuthSession},
-    utils::{get_redis_options, REDIS_EXPIRY},
+    }, login_system::{AuthBackend, AuthSession}, utils::parse_dt
 };
 
 use nanoid::nanoid;
@@ -55,36 +50,6 @@ pub struct PagedReservations {
     pub page_size: u64,
     pub total: u64,
     pub items: Vec<reservation::Model>,
-}
-
-// ===============================
-//   datetime parser (minimal add)
-// ===============================
-fn parse_dt(s: &str) -> Result<ChronoDateTime<FixedOffset>, ()> {
-    let raw = s.trim();
-
-    // 1) already has offset / Z
-    if let Ok(dt) = raw.parse::<ChronoDateTime<FixedOffset>>() {
-        return Ok(dt);
-    }
-
-    // 2) normalize then append +08:00 (Taiwan)
-    let mut base = raw.to_string();
-
-    // "YYYY-MM-DD HH:MM" -> "YYYY-MM-DDTHH:MM"
-    if base.as_bytes().get(10) == Some(&b' ') {
-        base.replace_range(10..11, "T");
-    }
-
-    // add seconds
-    if base.len() == 16 {
-        base.push_str(":00");
-    }
-
-    // add timezone
-    base.push_str("+08:00");
-
-    base.parse::<ChronoDateTime<FixedOffset>>().map_err(|_| ())
 }
 
 // ===============================
@@ -156,7 +121,7 @@ pub async fn create_reservation(
                 .set_options(
                     format!("reservation_{}", model.id),
                     serde_json::to_string(&model).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -424,7 +389,7 @@ pub async fn update_reservation(
                 .set_options(
                     format!("reservation_{}", updated.id),
                     serde_json::to_string(&updated).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -533,7 +498,7 @@ pub async fn get_all_reservations_for_self(
                 .set_options(
                     cache_key,
                     serde_json::to_string(&reservations).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
@@ -682,7 +647,7 @@ pub async fn admin_get_reservation_by_id(
                 .set_options(
                     format!("reservation_{}", model.id),
                     serde_json::to_string(&model).unwrap(),
-                    get_redis_options(),
+                    *REDIS_SET_OPTIONS,
                 )
                 .await;
             if let Err(e) = result {
