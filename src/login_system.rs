@@ -1,7 +1,7 @@
 use crate::{
     argon_hasher::verify,
     entities::{self, prelude::*, sea_orm_active_enums::Role, *},
-    utils::get_redis_options,
+    utils::{REDIS_EXPIRY, get_redis_options},
 };
 use axum_login::{AuthUser, AuthnBackend, AuthzBackend, UserId};
 use redis::{AsyncCommands, aio::MultiplexedConnection};
@@ -82,7 +82,7 @@ impl AuthnBackend for AuthBackend {
         
         // Try to get from cache first
         let cached_user: Option<String> = match redis
-            .get(format!("user_{}", user_id.to_owned()))
+            .get_ex(format!("user_{}", user_id.to_owned()), REDIS_EXPIRY)
             .await
         {
             Ok(user) => user,

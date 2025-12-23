@@ -22,7 +22,7 @@ use crate::{
     argon_hasher::{hash, verify},
     entities::{self, sea_orm_active_enums::Role, user},
     login_system::{AuthBackend, AuthSession, Credentials},
-    utils::{check_student_id, get_redis_options},
+    utils::{check_student_id, get_redis_options, REDIS_EXPIRY},
 };
 
 use nanoid::nanoid;
@@ -235,7 +235,7 @@ pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> 
     let mut redis = state.redis.clone();
     
     // Try to get from cache first
-    let cached_user: Option<String> = match redis.get(format!("user_{}", id)).await {
+    let cached_user: Option<String> = match redis.get_ex(format!("user_{}", id), REDIS_EXPIRY).await {
         Ok(user) => user,
         Err(e) => {
             warn!("Failed to get user {} from Redis cache: {}", id, e);
