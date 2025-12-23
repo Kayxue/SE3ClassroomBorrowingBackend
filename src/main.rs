@@ -140,7 +140,9 @@ struct BlacklistApi;
         routes::password::reset_password,
     ),
     components(schemas(
-        entities::password_reset::Model,
+        routes::password::ForgotPasswordBody,
+        routes::password::VerifyCodeBody,
+        routes::password::VerifyCodeResponse,
         routes::password::ResetPasswordBody,
     ))
 )]
@@ -345,7 +347,9 @@ struct ClassroomApi;
             entities::infraction::Model,
             routes::black_list::UpdateBlackListBody,
             entities::black_list::Model,
-            entities::password_reset::Model,
+            routes::password::ForgotPasswordBody,
+            routes::password::VerifyCodeBody,
+            routes::password::VerifyCodeResponse,
             routes::password::ResetPasswordBody,
         )
     )
