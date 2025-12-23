@@ -20,7 +20,7 @@ use utoipa::ToSchema;
 use crate::{
     AppState,
     argon_hasher::{hash, verify},
-    constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS},
+    constants::{REDIS_EXPIRY, get_redis_set_options},
     entities::{self, sea_orm_active_enums::Role, user},
     login_system::{AuthBackend, AuthSession, Credentials},
     utils::check_student_id,
@@ -136,7 +136,7 @@ pub async fn register(
                 .set_options(
                     format!("user_{}", user.id),
                     serde_json::to_string(&user).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -260,7 +260,7 @@ pub async fn get_user(State(state): State<AppState>, Path(id): Path<String>) -> 
                 .set_options(
                     format!("user_{}", user.id),
                     serde_json::to_string(&user).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -323,7 +323,7 @@ pub async fn update_password(
                 .set_options(
                     format!("user_{}", updated_user.id),
                     serde_json::to_string(&updated_user).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -392,7 +392,7 @@ pub async fn update_profile(
                 .set_options(
                     format!("user_{}", updated_user.id),
                     serde_json::to_string(&updated_user).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {

@@ -17,7 +17,7 @@ use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{
-    AppState, constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS}, email_client::send_email, entities::{
+    AppState, constants::{REDIS_EXPIRY, get_redis_set_options}, email_client::send_email, entities::{
         reservation,
         sea_orm_active_enums::{ReservationStatus, Role},
         user,
@@ -121,7 +121,7 @@ pub async fn create_reservation(
                 .set_options(
                     format!("reservation_{}", model.id),
                     serde_json::to_string(&model).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -389,7 +389,7 @@ pub async fn update_reservation(
                 .set_options(
                     format!("reservation_{}", updated.id),
                     serde_json::to_string(&updated).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -498,7 +498,7 @@ pub async fn get_all_reservations_for_self(
                 .set_options(
                     cache_key,
                     serde_json::to_string(&reservations).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -647,7 +647,7 @@ pub async fn admin_get_reservation_by_id(
                 .set_options(
                     format!("reservation_{}", model.id),
                     serde_json::to_string(&model).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {

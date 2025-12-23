@@ -1,5 +1,5 @@
 use crate::{
-    argon_hasher::verify, constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS}, entities::{self, prelude::*, sea_orm_active_enums::Role, *}
+    argon_hasher::verify, constants::{REDIS_EXPIRY, get_redis_set_options}, entities::{self, prelude::*, sea_orm_active_enums::Role, *}
 };
 use axum_login::{AuthUser, AuthnBackend, AuthzBackend, UserId};
 use redis::{AsyncCommands, aio::MultiplexedConnection};
@@ -62,7 +62,7 @@ impl AuthnBackend for AuthBackend {
                     .set_options(
                         format!("user_{}", user.id),
                         serde_json::to_string(user).unwrap(),
-                        *REDIS_SET_OPTIONS,
+                        get_redis_set_options(),
                     )
                     .await;
                 if let Err(e) = result {
@@ -105,7 +105,7 @@ impl AuthnBackend for AuthBackend {
                 .set_options(
                     format!("user_{}", user_id.to_owned()),
                     serde_json::to_string(user).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {

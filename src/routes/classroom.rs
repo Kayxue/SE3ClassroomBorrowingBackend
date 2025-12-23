@@ -31,7 +31,7 @@ use utoipa::ToSchema;
 
 use crate::{
     AppState,
-    constants::{REDIS_EXPIRY, REDIS_SET_OPTIONS},
+    constants::{REDIS_EXPIRY, get_redis_set_options},
     utils::{
         classroom_key, classroom_with_keys_and_reservations_key, classroom_with_keys_key,
         classroom_with_reservations_key,
@@ -181,7 +181,7 @@ pub async fn create_classroom(
                 .set_options(
                     classroom_key(&classroom.id),
                     serde_json::to_string(&classroom).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -238,7 +238,7 @@ pub async fn list_classrooms(State(state): State<AppState>) -> impl IntoResponse
                 .set_options(
                     CLASSROOMS_LIST_KEY,
                     serde_json::to_string(&classrooms).unwrap(),
-                    *REDIS_SET_OPTIONS,
+                    get_redis_set_options(),
                 )
                 .await;
             if let Err(e) = result {
@@ -337,7 +337,7 @@ pub async fn get_classroom(
                                 .set_options(
                                     &cache_key,
                                     serde_json::to_string(&response).unwrap(),
-                                    *REDIS_SET_OPTIONS,
+                                    get_redis_set_options(),
                                 )
                                 .await;
                             return (StatusCode::OK, Json(response)).into_response();
@@ -367,7 +367,7 @@ pub async fn get_classroom(
                                 .set_options(
                                     &cache_key,
                                     serde_json::to_string(&response).unwrap(),
-                                    *REDIS_SET_OPTIONS,
+                                    get_redis_set_options(),
                                 )
                                 .await;
                             return (StatusCode::OK, Json(response)).into_response();
@@ -397,7 +397,7 @@ pub async fn get_classroom(
                                 .set_options(
                                     &cache_key,
                                     serde_json::to_string(&response).unwrap(),
-                                    *REDIS_SET_OPTIONS,
+                                    get_redis_set_options(),
                                 )
                                 .await;
                             return (StatusCode::OK, Json(response)).into_response();
@@ -417,7 +417,7 @@ pub async fn get_classroom(
                         .set_options(
                             &cache_key,
                             serde_json::to_string(&classroom).unwrap(),
-                            *REDIS_SET_OPTIONS,
+                            get_redis_set_options(),
                         )
                         .await;
                     if let Err(e) = result {
@@ -474,7 +474,7 @@ pub async fn update_classroom(
                         .set_options(
                             classroom_key(&updated.id),
                             serde_json::to_string(&updated).unwrap(),
-                            *REDIS_SET_OPTIONS,
+                            get_redis_set_options(),
                         )
                         .await;
                     if let Err(e) = result {
@@ -577,7 +577,7 @@ pub async fn update_classroom_photo(
                     .set_options(
                         classroom_key(&classroom_model.id),
                         serde_json::to_string(&classroom_model).unwrap(),
-                        *REDIS_SET_OPTIONS,
+                        get_redis_set_options(),
                     )
                     .await;
                 if let Err(e) = result {
