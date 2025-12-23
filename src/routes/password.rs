@@ -1,7 +1,7 @@
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use chrono::{Duration, Utc};
 use nanoid::nanoid;
-use redis::{AsyncCommands, SetOptions};
+use redis::{AsyncCommands, RedisError, SetOptions, SetExpiry};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -106,11 +106,11 @@ pub async fn forgot_password(
 
         // Store code in Redis with TTL (this automatically replaces any existing code for this email)
         let mut redis = state.redis.clone();
-        let result: Result<(), redis::RedisError> = redis
+        let result: Result<(), RedisError> = redis
             .set_options(
                 code_key(&email),
                 serde_json::to_string(&code_data).unwrap(),
-                SetOptions::default().with_expiration(redis::SetExpiry::EX(CODE_TTL_SECONDS)),
+                SetOptions::default().with_expiration(SetExpiry::EX(CODE_TTL_SECONDS)),
             )
             .await;
 
@@ -127,7 +127,7 @@ pub async fn forgot_password(
         }
 
         // Also delete any existing token for this email (cleanup)
-        let _: Result<(), redis::RedisError> = redis.del(token_key(&email)).await;
+        let _: Result<(), RedisError> = redis.del(token_key(&email)).await;
 
         let subject = "Password Reset Verification Code";
         let content = format!(
@@ -209,11 +209,11 @@ pub async fn verify_code(
     };
 
     // Store token in Redis and delete code (to prevent reuse)
-    let result: Result<(), redis::RedisError> = redis
+    let result: Result<(), RedisError> = redis
         .set_options(
             token_key(&email),
             serde_json::to_string(&token_data).unwrap(),
-            SetOptions::default().with_expiration(redis::SetExpiry::EX(TOKEN_TTL_SECONDS)),
+            SetOptions::default().with_expiration(SetExpiry::EX(TOKEN_TTL_SECONDS)),
         )
         .await;
 
@@ -230,7 +230,7 @@ pub async fn verify_code(
     }
 
     // Delete the code (prevent reuse)
-    let _: Result<(), redis::RedisError> = redis.del(code_key(&email)).await;
+    let _: Result<(), RedisError> = redis.del(code_key(&email)).await;
 
     (StatusCode::OK, Json(VerifyCodeResponse { reset_token })).into_response()
 }
@@ -336,10 +336,10 @@ pub async fn reset_password(
     }
 
     // Invalidate user cache in Redis (password changed)
-    let _: Result<(), redis::RedisError> = redis.del(format!("user_{}", user_id)).await;
+    let _: Result<(), RedisError> = redis.del(format!("user_{}", user_id)).await;
 
     // Delete reset token from Redis (successful reset)
-    let _: Result<(), redis::RedisError> = redis.del(token_key(&email)).await;
+    let _: Result<(), RedisError> = redis.del(token_key(&email)).await;
 
     (StatusCode::OK, "Password reset successfully").into_response()
 }
