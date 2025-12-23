@@ -8,7 +8,7 @@ use axum::{
 use axum_login::{login_required, permission_required};
 use redis::AsyncCommands;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait,
+    ActiveModelTrait, ActiveValue::{NotSet, Set}, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait,
     QueryFilter, QueryOrder,
 };
 use serde::{Deserialize, Serialize};
@@ -86,10 +86,7 @@ pub async fn create_reservation(
     State(state): State<AppState>,
     Json(body): Json<CreateReservationBody>,
 ) -> impl IntoResponse {
-    let user = match session.user {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
+    let user = session.user.unwrap();
 
     let start_dt = match parse_dt(&body.start_time) {
         Ok(v) => v,
@@ -107,9 +104,9 @@ pub async fn create_reservation(
         purpose: Set(body.purpose),
         start_time: Set(start_dt),
         end_time: Set(end_dt),
-        approved_by: Set(None),
-        reject_reason: Set(None),
-        cancel_reason: Set(None),
+        approved_by: NotSet,
+        reject_reason: NotSet,
+        cancel_reason: NotSet,
         status: Set(ReservationStatus::Pending),
     };
 
@@ -159,8 +156,7 @@ pub async fn create_reservation(
                                 "There is a new reservation request. Reservation ID: {}",
                                 model.id
                             ),
-                        )
-                        .await;
+                        );
                     }
                 }
                 Err(_) => {
