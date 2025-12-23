@@ -343,7 +343,7 @@ pub async fn update_reservation(
         }
     };
 
-    if res_model.user_id != Some(user.id.clone()) {
+    if res_model.user_id != Some(user.id) {
         return (
             StatusCode::FORBIDDEN,
             "You can only update your own reservation",
@@ -569,7 +569,7 @@ pub async fn cancel_reservation(
         )
             .into_response();
     }
-
+    
     // Save user_id before deleting (delete consumes the reservation)
     let user_id = reservation.user_id.clone();
 

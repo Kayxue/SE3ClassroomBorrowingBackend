@@ -79,11 +79,11 @@ pub async fn forgot_password(
     State(state): State<AppState>,
     Json(body): Json<ForgotPasswordBody>,
 ) -> impl IntoResponse {
-    let email = body.email.trim().to_lowercase();
+    let email = body.email.trim().to_string();
 
     // Check if user exists (but always return 200 to avoid email enumeration)
     let exists = match user::Entity::find()
-        .filter(user::Column::Email.eq(email.clone()))
+        .filter(user::Column::Email.eq(&email))
         .one(&state.db)
         .await
     {
@@ -252,7 +252,7 @@ pub async fn reset_password(
     State(state): State<AppState>,
     Json(body): Json<ResetPasswordBody>,
 ) -> impl IntoResponse {
-    let email = body.email.trim().to_lowercase();
+    let email = body.email.trim().to_owned();
     let token = body.reset_token.trim().to_string();
 
     if body.new_password != body.confirm {
@@ -301,7 +301,7 @@ pub async fn reset_password(
 
     // Find user in database
     let u = match user::Entity::find()
-        .filter(user::Column::Email.eq(email.clone()))
+        .filter(user::Column::Email.eq(&email))
         .one(&state.db)
         .await
     {

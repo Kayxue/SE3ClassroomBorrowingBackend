@@ -221,7 +221,7 @@ pub async fn update_key(
 
     match key::Entity::find()
         .filter(key::Column::KeyNumber.eq(&body.key_number))
-        .filter(key::Column::Id.ne(id.clone()))
+        .filter(key::Column::Id.ne(&id))
         .one(&state.db)
         .await
     {
@@ -501,7 +501,7 @@ pub async fn list_key_logs_by_key(
     }
 
     let mut stmt = key_transaction_log::Entity::find()
-        .filter(key_transaction_log::Column::KeyId.eq(id.clone()));
+        .filter(key_transaction_log::Column::KeyId.eq(&id));
 
     if let Some(reservation_id) = &q.reservation_id {
         stmt = stmt.filter(key_transaction_log::Column::ReservationId.eq(reservation_id));
