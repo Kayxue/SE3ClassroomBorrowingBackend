@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - builder: "ubuntu-latest"
+          - builder: "self-hosted"
             platform: linux/amd64
           - builder: ubuntu-24.04-arm
             platform: linux/arm64
@@ -36,7 +36,7 @@ jobs:
         run: |
           echo "REGISTRY_IMAGE=ghcr.io/${REGISTRY,,}" >> $GITHUB_ENV
         env:
-          REGISTRY: '${{ github.repository }}'
+          REGISTRY: "${{ github.repository }}"
 
       - name: Docker meta
         id: meta
@@ -90,7 +90,7 @@ jobs:
         run: |
           echo "REGISTRY_IMAGE=ghcr.io/${REGISTRY,,}" >> $GITHUB_ENV
         env:
-          REGISTRY: '${{ github.repository }}'
+          REGISTRY: "${{ github.repository }}"
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
